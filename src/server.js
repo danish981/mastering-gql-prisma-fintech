@@ -1,5 +1,6 @@
 const express = require('express');
 const { ApolloServer } = require('apollo-server-express');
+const { ApolloServerPluginLandingPageLocalDefault } = require('apollo-server-core');
 const fs = require('fs');
 const path = require('path');
 const userResolver = require('./graphql/resolvers/userResolver');
@@ -28,6 +29,9 @@ const resolvers = [userResolver, fintechResolver];
 const server = new ApolloServer({
   typeDefs,
   resolvers,
+  plugins: [
+    ApolloServerPluginLandingPageLocalDefault({ embed: true }),
+  ],
   formatError: (error) => {
     console.error(error);
     return error;
