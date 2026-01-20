@@ -1,0 +1,263 @@
+extend type Query {
+  # Account queries
+  accounts(userId: Int!): [Account!]!
+  account(id: Int!): Account
+  accountByNumber(accountNumber: String!): Account
+  
+  # Transaction queries
+  transactions(userId: Int!, status: TransactionStatus, type: TransactionType, limit: Int): [Transaction!]!
+  transaction(id: Int!): Transaction
+  transactionByReference(reference: String!): Transaction
+  
+  # Card queries
+  cards(userId: Int!): [Card!]!
+  card(id: Int!): Card
+  
+  # Beneficiary queries
+  beneficiaries(userId: Int!): [Beneficiary!]!
+  beneficiary(id: Int!): Beneficiary
+  
+  # Notification queries
+  notifications(userId: Int!, status: NotificationStatus): [Notification!]!
+  unreadNotificationCount(userId: Int!): Int!
+}
+
+extend type Mutation {
+  # Account mutations
+  createAccount(input: CreateAccountInput!): Account!
+  updateAccountStatus(id: Int!, status: AccountStatus!): Account!
+  setDefaultAccount(id: Int!, userId: Int!): Account!
+  
+  # Transaction mutations
+  createTransaction(input: CreateTransactionInput!): Transaction!
+  processTransaction(id: Int!): Transaction!
+  cancelTransaction(id: Int!): Transaction!
+  
+  # Card mutations
+  createCard(input: CreateCardInput!): Card!
+  blockCard(id: Int!): Card!
+  unblockCard(id: Int!): Card!
+  
+  # Beneficiary mutations
+  addBeneficiary(input: AddBeneficiaryInput!): Beneficiary!
+  verifyBeneficiary(id: Int!): Beneficiary!
+  removeBeneficiary(id: Int!): Boolean!
+  
+  # Notification mutations
+  markNotificationAsRead(id: Int!): Notification!
+  markAllNotificationsAsRead(userId: Int!): Boolean!
+  deleteNotification(id: Int!): Boolean!
+}
+
+# ============================================
+# ACCOUNT TYPES
+# ============================================
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  CRYPTO
+}
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  JPY
+  BTC
+  ETH
+}
+
+type Account {
+  id: Int!
+  userId: Int!
+  accountNumber: String!
+  accountType: AccountType!
+  currency: Currency!
+  balance: Float!
+  availableBalance: Float!
+  isDefault: Boolean!
+  status: AccountStatus!
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
+  transactionsFrom: [Transaction!]!
+  transactionsTo: [Transaction!]!
+}
+
+input CreateAccountInput {
+  userId: Int!
+  accountType: AccountType!
+  currency: Currency
+}
+
+# ============================================
+# TRANSACTION TYPES
+# ============================================
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+  FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+type Transaction {
+  id: Int!
+  userId: Int!
+  fromAccountId: Int
+  toAccountId: Int
+  type: TransactionType!
+  status: TransactionStatus!
+  amount: Float!
+  currency: Currency!
+  fee: Float!
+  description: String
+  reference: String!
+  metadata: JSON
+  processedAt: String
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
+  fromAccount: Account
+  toAccount: Account
+}
+
+input CreateTransactionInput {
+  userId: Int!
+  fromAccountId: Int
+  toAccountId: Int
+  type: TransactionType!
+  amount: Float!
+  currency: Currency
+  description: String
+  metadata: JSON
+}
+
+# ============================================
+# CARD TYPES
+# ============================================
+
+enum CardType {
+  DEBIT
+  CREDIT
+  PREPAID
+  VIRTUAL
+}
+
+enum CardStatus {
+  ACTIVE
+  BLOCKED
+  EXPIRED
+  CANCELLED
+}
+
+type Card {
+  id: Int!
+  userId: Int!
+  cardNumber: String!
+  cardHolderName: String!
+  cardType: CardType!
+  status: CardStatus!
+  expiryMonth: Int!
+  expiryYear: Int!
+  cvv: String!
+  creditLimit: Float
+  availableCredit: Float
+  isVirtual: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
+}
+
+input CreateCardInput {
+  userId: Int!
+  cardHolderName: String!
+  cardType: CardType!
+  expiryMonth: Int!
+  expiryYear: Int!
+  isVirtual: Boolean
+  creditLimit: Float
+}
+
+# ============================================
+# BENEFICIARY TYPES
+# ============================================
+
+type Beneficiary {
+  id: Int!
+  userId: Int!
+  name: String!
+  accountNumber: String!
+  bankName: String!
+  bankCode: String
+  email: String
+  phoneNumber: String
+  isVerified: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
+}
+
+input AddBeneficiaryInput {
+  userId: Int!
+  name: String!
+  accountNumber: String!
+  bankName: String!
+  bankCode: String
+  email: String
+  phoneNumber: String
+}
+
+# ============================================
+# NOTIFICATION TYPES
+# ============================================
+
+enum NotificationType {
+  TRANSACTION
+  SECURITY
+  ACCOUNT
+  PROMOTIONAL
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+type Notification {
+  id: Int!
+  userId: Int!
+  type: NotificationType!
+  status: NotificationStatus!
+  title: String!
+  message: String!
+  metadata: JSON
+  createdAt: String!
+  readAt: String
+  
+  user: User!
+}
+
+# ============================================
+# CUSTOM SCALARS
+# ============================================
+

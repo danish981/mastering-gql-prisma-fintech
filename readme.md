@@ -191,3 +191,7 @@ This README is production-ready with:
 - ✅ Example GraphQL query
 - ✅ Contributing guidelines
 - ✅ Proper badges & links
+
+
+how indexing works pgsql - speed up things
+https://youtu.be/teMXE6hzva0

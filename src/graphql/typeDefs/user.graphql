@@ -1,16 +1,131 @@
+extend type Query {
+  # Auth queries
+  me: User
+  login(email: String!, password: String!): AuthPayload!
+  
+  # User queries
+  users(role: UserRole, status: AccountStatus): [User!]!
+  user(id: Int!): User
+  userProfile(userId: Int!): UserProfile
+}
+
+extend type Mutation {
+  # Auth mutations
+  register(input: RegisterInput!): AuthPayload!
+  logout(token: String!): Boolean!
+  verifyEmail(userId: Int!): User!
+  
+  # User mutations
+  updateUser(id: Int!, input: UpdateUserInput!): User!
+  updateUserProfile(userId: Int!, input: UpdateProfileInput!): UserProfile!
+  changePassword(userId: Int!, oldPassword: String!, newPassword: String!): Boolean!
+}
+
+# ============================================
+# AUTH TYPES
+# ============================================
+
+type AuthPayload {
+  token: String!
+  user: User!
+  expiresAt: String!
+}
+
+input RegisterInput {
+  email: String!
+  password: String!
+  firstName: String!
+  lastName: String!
+  phoneNumber: String
+  dateOfBirth: String
+}
+
+input UpdateUserInput {
+  firstName: String
+  lastName: String
+  phoneNumber: String
+  dateOfBirth: String
+}
+
+input UpdateProfileInput {
+  address: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+  occupation: String
+  annualIncome: Float
+  profileImageUrl: String
+}
+
+# ============================================
+# USER TYPES
+# ============================================
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  SUPPORT
+  MERCHANT
+}
+
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  PENDING_VERIFICATION
+}
+
 type User {
   id: Int!
   email: String!
-  name: String
-  posts: [Post!]!
+  firstName: String!
+  lastName: String!
+  fullName: String!
+  phoneNumber: String
+  dateOfBirth: String
+  role: UserRole!
+  status: AccountStatus!
+  emailVerified: Boolean!
+  kycVerified: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  lastLoginAt: String
+  
+  # Relations
+  profile: UserProfile
+  accounts: [Account!]!
+  cards: [Card!]!
+  transactions: [Transaction!]!
+  beneficiaries: [Beneficiary!]!
+  notifications: [Notification!]!
 }
 
-type Query {
-  user(id: Int!): User
-  users: [User!]!
+type UserProfile {
+  id: Int!
+  userId: Int!
+  address: String
+  city: String
+  state: String
+  country: String
+  postalCode: String
+  occupation: String
+  annualIncome: Float
+  profileImageUrl: String
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
 }
 
-type Mutation {
-  createUser(email: String!, name: String): User!
-  deleteUser(id: Int!): User
+type Session {
+  id: Int!
+  userId: Int!
+  token: String!
+  ipAddress: String
+  userAgent: String
+  expiresAt: String!
+  createdAt: String!
+  
+  user: User!
 }

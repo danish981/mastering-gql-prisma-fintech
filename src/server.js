@@ -3,23 +3,27 @@ const { ApolloServer } = require('apollo-server-express');
 const fs = require('fs');
 const path = require('path');
 const userResolver = require('./graphql/resolvers/userResolver');
-const postResolver = require('./graphql/resolvers/postResolver');
+const fintechResolver = require('./graphql/resolvers/fintechResolver');
 require('dotenv').config();
 
 const app = express();
 
 // Load GraphQL type definitions
+const baseTypeDefs = fs.readFileSync(
+  path.join(__dirname, 'graphql/typeDefs/base.graphql'),
+  'utf8'
+);
 const userTypeDefs = fs.readFileSync(
   path.join(__dirname, 'graphql/typeDefs/user.graphql'),
   'utf8'
 );
-const postTypeDefs = fs.readFileSync(
-  path.join(__dirname, 'graphql/typeDefs/post.graphql'),
+const fintechTypeDefs = fs.readFileSync(
+  path.join(__dirname, 'graphql/typeDefs/fintech.graphql'),
   'utf8'
 );
 
-const typeDefs = [userTypeDefs, postTypeDefs];
-const resolvers = [userResolver, postResolver];
+const typeDefs = [baseTypeDefs, userTypeDefs, fintechTypeDefs];
+const resolvers = [userResolver, fintechResolver];
 
 const server = new ApolloServer({
   typeDefs,
