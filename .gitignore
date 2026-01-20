@@ -1,0 +1,28 @@
+# IDEs and Editors
+.idea/
+.vscode/
+.dist/
+out/
+build/
+
+# Dependencies
+node_modules/
+
+# Prisma & Environment
+.env
+.env.local
+.env.test
+
+# Prisma 7 Specifics
+# Ignore the generated Prisma Client if you are outputting to a custom path
+# If using the default (node_modules/.prisma), it is already ignored via node_modules/
+/generated/prisma
+
+# If you use SQLite for local dev
+*.db
+*.db-journal
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
