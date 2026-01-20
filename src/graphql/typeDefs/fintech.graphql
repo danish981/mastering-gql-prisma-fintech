@@ -20,6 +20,18 @@ extend type Query {
   # Notification queries
   notifications(userId: Int!, status: NotificationStatus): [Notification!]!
   unreadNotificationCount(userId: Int!): Int!
+
+  # NEW: Investment queries
+  investments(accountId: Int!): [Investment!]!
+  marketData: [MarketData!]!
+  marketDataBySymbol(symbol: String!): MarketData
+
+  # NEW: Support queries
+  tickets(userId: Int!, status: TicketStatus): [SupportTicket!]!
+  ticket(id: Int!): SupportTicket
+
+  # NEW: Audit queries
+  auditLogs(userId: Int!, action: String): [AuditLog!]!
 }
 
 extend type Mutation {
@@ -47,6 +59,10 @@ extend type Mutation {
   markNotificationAsRead(id: Int!): Notification!
   markAllNotificationsAsRead(userId: Int!): Boolean!
   deleteNotification(id: Int!): Boolean!
+
+  # NEW: Support mutations
+  createTicket(input: CreateTicketInput!): SupportTicket!
+  updateTicketStatus(id: Int!, status: TicketStatus!): SupportTicket!
 }
 
 # ============================================
@@ -85,6 +101,7 @@ type Account {
   user: User!
   transactionsFrom: [Transaction!]!
   transactionsTo: [Transaction!]!
+  investments: [Investment!]!
 }
 
 input CreateAccountInput {
@@ -258,6 +275,90 @@ type Notification {
 }
 
 # ============================================
-# CUSTOM SCALARS
+# INVESTMENT & MARKET TYPES
 # ============================================
 
+type Investment {
+  id: Int!
+  accountId: Int!
+  symbol: String!
+  assetName: String!
+  quantity: Float!
+  averagePrice: Float!
+  currentPrice: Float!
+  totalValue: Float!
+  plPercentage: Float!
+  createdAt: String!
+  updatedAt: String!
+  
+  account: Account!
+}
+
+type MarketData {
+  id: Int!
+  symbol: String!
+  name: String!
+  type: String!
+  currentPrice: Float!
+  change24h: Float!
+  volume24h: Float!
+  lastUpdated: String!
+}
+
+# ============================================
+# SUPPORT TYPES
+# ============================================
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+type SupportTicket {
+  id: Int!
+  userId: Int!
+  subject: String!
+  description: String!
+  status: TicketStatus!
+  priority: TicketPriority!
+  category: String
+  createdAt: String!
+  updatedAt: String!
+  resolvedAt: String
+  
+  user: User!
+}
+
+input CreateTicketInput {
+  userId: Int!
+  subject: String!
+  description: String!
+  category: String
+  priority: TicketPriority
+}
+
+# ============================================
+# AUDIT TYPES
+# ============================================
+
+type AuditLog {
+  id: Int!
+  userId: Int
+  action: String!
+  resource: String!
+  payload: JSON
+  ipAddress: String
+  userAgent: String
+  createdAt: String!
+  
+  user: User
+}

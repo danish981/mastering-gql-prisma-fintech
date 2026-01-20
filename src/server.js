@@ -22,7 +22,7 @@ const fintechTypeDefs = fs.readFileSync(
   'utf8'
 );
 
-const typeDefs = [baseTypeDefs, userTypeDefs, fintechTypeDefs];
+const typeDefs = [baseTypeDefs, userTypeDefs, fintechTypeDefs].join('\n');
 const resolvers = [userResolver, fintechResolver];
 
 const server = new ApolloServer({

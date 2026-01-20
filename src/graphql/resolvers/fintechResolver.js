@@ -2,17 +2,15 @@ const prisma = require('../../lib/prisma');
 const { GraphQLError } = require('graphql');
 const { GraphQLJSON } = require('graphql-type-json');
 
-// Helper function to generate random account number
+// Helper functions
 function generateAccountNumber() {
     return `ACC${Math.floor(Math.random() * 10000000000).toString().padStart(10, '0')}`;
 }
 
-// Helper function to generate random transaction reference
 function generateReference() {
     return `TXN${Date.now()}${Math.floor(Math.random() * 10000)}`;
 }
 
-// Helper function to generate random card number (last 4 digits)
 function generateCardNumber() {
     return `****-****-****-${Math.floor(1000 + Math.random() * 9000)}`;
 }
@@ -123,6 +121,52 @@ const fintechResolver = {
                 },
             });
         },
+
+        // NEW: Investment Queries
+        investments: async (_, { accountId }) => {
+            return await prisma.investment.findMany({
+                where: { accountId },
+                orderBy: { createdAt: 'desc' },
+            });
+        },
+
+        marketData: async () => {
+            return await prisma.marketData.findMany({
+                orderBy: { symbol: 'asc' },
+            });
+        },
+
+        marketDataBySymbol: async (_, { symbol }) => {
+            return await prisma.marketData.findUnique({
+                where: { symbol },
+            });
+        },
+
+        // NEW: Support Queries
+        tickets: async (_, { userId, status }) => {
+            const where = { userId };
+            if (status) where.status = status;
+            return await prisma.supportTicket.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+            });
+        },
+
+        ticket: async (_, { id }) => {
+            return await prisma.supportTicket.findUnique({
+                where: { id },
+            });
+        },
+
+        // NEW: Audit Queries
+        auditLogs: async (_, { userId, action }) => {
+            const where = { userId };
+            if (action) where.action = action;
+            return await prisma.auditLog.findMany({
+                where,
+                orderBy: { createdAt: 'desc' },
+            });
+        },
     },
 
     Mutation: {
@@ -131,23 +175,11 @@ const fintechResolver = {
         // ============================================
         createAccount: async (_, { input }) => {
             const { userId, accountType, currency = 'USD' } = input;
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (!user) throw new GraphQLError('User not found');
 
-            // Check if user exists
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-            });
-
-            if (!user) {
-                throw new GraphQLError('User not found');
-            }
-
-            // Generate unique account number
             const accountNumber = generateAccountNumber();
-
-            // Check if this is the user's first account
-            const existingAccounts = await prisma.account.count({
-                where: { userId },
-            });
+            const existingAccounts = await prisma.account.count({ where: { userId } });
 
             return await prisma.account.create({
                 data: {
@@ -155,7 +187,7 @@ const fintechResolver = {
                     accountNumber,
                     accountType,
                     currency,
-                    isDefault: existingAccounts === 0, // First account is default
+                    isDefault: existingAccounts === 0,
                 },
             });
         },
@@ -168,13 +200,10 @@ const fintechResolver = {
         },
 
         setDefaultAccount: async (_, { id, userId }) => {
-            // Remove default from all user accounts
             await prisma.account.updateMany({
                 where: { userId },
                 data: { isDefault: false },
             });
-
-            // Set new default
             return await prisma.account.update({
                 where: { id },
                 data: { isDefault: true },
@@ -187,43 +216,22 @@ const fintechResolver = {
         createTransaction: async (_, { input }) => {
             const { userId, fromAccountId, toAccountId, type, amount, currency = 'USD', description, metadata } = input;
 
-            // Validate accounts
             if (fromAccountId) {
-                const fromAccount = await prisma.account.findUnique({
-                    where: { id: fromAccountId },
-                });
-
-                if (!fromAccount) {
-                    throw new GraphQLError('Source account not found');
-                }
-
-                // Check sufficient balance for transfers/withdrawals/payments
+                const fromAccount = await prisma.account.findUnique({ where: { id: fromAccountId } });
+                if (!fromAccount) throw new GraphQLError('Source account not found');
                 if (['TRANSFER', 'WITHDRAWAL', 'PAYMENT'].includes(type)) {
-                    if (fromAccount.availableBalance < amount) {
-                        throw new GraphQLError('Insufficient funds');
-                    }
+                    if (fromAccount.availableBalance < amount) throw new GraphQLError('Insufficient funds');
                 }
             }
 
             if (toAccountId) {
-                const toAccount = await prisma.account.findUnique({
-                    where: { id: toAccountId },
-                });
-
-                if (!toAccount) {
-                    throw new GraphQLError('Destination account not found');
-                }
+                const toAccount = await prisma.account.findUnique({ where: { id: toAccountId } });
+                if (!toAccount) throw new GraphQLError('Destination account not found');
             }
 
-            // Calculate fee (2.5 for transfers, 5 for withdrawals, 0 for others)
-            let fee = 0;
-            if (type === 'TRANSFER') fee = 2.50;
-            if (type === 'WITHDRAWAL') fee = 5.00;
-
-            // Generate unique reference
+            let fee = type === 'TRANSFER' ? 2.50 : (type === 'WITHDRAWAL' ? 5.00 : 0);
             const reference = generateReference();
 
-            // Create transaction
             return await prisma.transaction.create({
                 data: {
                     userId,
@@ -241,19 +249,10 @@ const fintechResolver = {
         },
 
         processTransaction: async (_, { id }) => {
-            const transaction = await prisma.transaction.findUnique({
-                where: { id },
-            });
+            const transaction = await prisma.transaction.findUnique({ where: { id } });
+            if (!transaction) throw new GraphQLError('Transaction not found');
+            if (transaction.status !== 'PENDING') throw new GraphQLError('Transaction cannot be processed');
 
-            if (!transaction) {
-                throw new GraphQLError('Transaction not found');
-            }
-
-            if (transaction.status !== 'PENDING') {
-                throw new GraphQLError('Transaction cannot be processed');
-            }
-
-            // Update account balances
             if (transaction.fromAccountId) {
                 await prisma.account.update({
                     where: { id: transaction.fromAccountId },
@@ -274,26 +273,17 @@ const fintechResolver = {
                 });
             }
 
-            // Update transaction status
             const updatedTransaction = await prisma.transaction.update({
                 where: { id },
-                data: {
-                    status: 'COMPLETED',
-                    processedAt: new Date(),
-                },
+                data: { status: 'COMPLETED', processedAt: new Date() },
             });
 
-            // Create notification
             await prisma.notification.create({
                 data: {
                     userId: transaction.userId,
                     type: 'TRANSACTION',
                     title: 'Transaction Completed',
                     message: `Your ${transaction.type.toLowerCase()} of $${transaction.amount} was successful`,
-                    metadata: {
-                        transactionId: transaction.id,
-                        amount: transaction.amount,
-                    },
                 },
             });
 
@@ -301,18 +291,9 @@ const fintechResolver = {
         },
 
         cancelTransaction: async (_, { id }) => {
-            const transaction = await prisma.transaction.findUnique({
-                where: { id },
-            });
-
-            if (!transaction) {
-                throw new GraphQLError('Transaction not found');
-            }
-
-            if (transaction.status !== 'PENDING') {
-                throw new GraphQLError('Only pending transactions can be cancelled');
-            }
-
+            const transaction = await prisma.transaction.findUnique({ where: { id } });
+            if (!transaction) throw new GraphQLError('Transaction not found');
+            if (transaction.status !== 'PENDING') throw new GraphQLError('Only pending transactions can be cancelled');
             return await prisma.transaction.update({
                 where: { id },
                 data: { status: 'CANCELLED' },
@@ -324,20 +305,10 @@ const fintechResolver = {
         // ============================================
         createCard: async (_, { input }) => {
             const { userId, cardHolderName, cardType, expiryMonth, expiryYear, isVirtual = false, creditLimit } = input;
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (!user) throw new GraphQLError('User not found');
 
-            // Validate user
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-            });
-
-            if (!user) {
-                throw new GraphQLError('User not found');
-            }
-
-            // Generate card number
             const cardNumber = generateCardNumber();
-
-            // Generate CVV
             const cvv = Math.floor(100 + Math.random() * 900).toString();
 
             return await prisma.card.create({
@@ -357,17 +328,11 @@ const fintechResolver = {
         },
 
         blockCard: async (_, { id }) => {
-            return await prisma.card.update({
-                where: { id },
-                data: { status: 'BLOCKED' },
-            });
+            return await prisma.card.update({ where: { id }, data: { status: 'BLOCKED' } });
         },
 
         unblockCard: async (_, { id }) => {
-            return await prisma.card.update({
-                where: { id },
-                data: { status: 'ACTIVE' },
-            });
+            return await prisma.card.update({ where: { id }, data: { status: 'ACTIVE' } });
         },
 
         // ============================================
@@ -375,15 +340,8 @@ const fintechResolver = {
         // ============================================
         addBeneficiary: async (_, { input }) => {
             const { userId, name, accountNumber, bankName, bankCode, email, phoneNumber } = input;
-
-            // Validate user
-            const user = await prisma.user.findUnique({
-                where: { id: userId },
-            });
-
-            if (!user) {
-                throw new GraphQLError('User not found');
-            }
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            if (!user) throw new GraphQLError('User not found');
 
             return await prisma.beneficiary.create({
                 data: {
@@ -399,16 +357,11 @@ const fintechResolver = {
         },
 
         verifyBeneficiary: async (_, { id }) => {
-            return await prisma.beneficiary.update({
-                where: { id },
-                data: { isVerified: true },
-            });
+            return await prisma.beneficiary.update({ where: { id }, data: { isVerified: true } });
         },
 
         removeBeneficiary: async (_, { id }) => {
-            await prisma.beneficiary.delete({
-                where: { id },
-            });
+            await prisma.beneficiary.delete({ where: { id } });
             return true;
         },
 
@@ -418,32 +371,37 @@ const fintechResolver = {
         markNotificationAsRead: async (_, { id }) => {
             return await prisma.notification.update({
                 where: { id },
-                data: {
-                    status: 'READ',
-                    readAt: new Date(),
-                },
+                data: { status: 'READ', readAt: new Date() },
             });
         },
 
         markAllNotificationsAsRead: async (_, { userId }) => {
             await prisma.notification.updateMany({
-                where: {
-                    userId,
-                    status: 'UNREAD',
-                },
-                data: {
-                    status: 'READ',
-                    readAt: new Date(),
-                },
+                where: { userId, status: 'UNREAD' },
+                data: { status: 'READ', readAt: new Date() },
             });
             return true;
         },
 
         deleteNotification: async (_, { id }) => {
-            await prisma.notification.delete({
-                where: { id },
-            });
+            await prisma.notification.delete({ where: { id } });
             return true;
+        },
+
+        // NEW: Support Mutations
+        createTicket: async (_, { input }) => {
+            return await prisma.supportTicket.create({
+                data: { ...input },
+            });
+        },
+
+        updateTicketStatus: async (_, { id, status }) => {
+            const data = { status };
+            if (status === 'RESOLVED' || status === 'CLOSED') data.resolvedAt = new Date();
+            return await prisma.supportTicket.update({
+                where: { id },
+                data,
+            });
         },
     },
 
@@ -452,69 +410,67 @@ const fintechResolver = {
     // ============================================
     Account: {
         user: async (parent) => {
-            return await prisma.user.findUnique({
-                where: { id: parent.userId },
-            });
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
-
         transactionsFrom: async (parent) => {
-            return await prisma.transaction.findMany({
-                where: { fromAccountId: parent.id },
-                orderBy: { createdAt: 'desc' },
-            });
+            return await prisma.transaction.findMany({ where: { fromAccountId: parent.id }, orderBy: { createdAt: 'desc' } });
         },
-
         transactionsTo: async (parent) => {
-            return await prisma.transaction.findMany({
-                where: { toAccountId: parent.id },
-                orderBy: { createdAt: 'desc' },
-            });
+            return await prisma.transaction.findMany({ where: { toAccountId: parent.id }, orderBy: { createdAt: 'desc' } });
+        },
+        investments: async (parent) => {
+            return await prisma.investment.findMany({ where: { accountId: parent.id }, orderBy: { createdAt: 'desc' } });
         },
     },
 
     Transaction: {
         user: async (parent) => {
-            return await prisma.user.findUnique({
-                where: { id: parent.userId },
-            });
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
-
         fromAccount: async (parent) => {
             if (!parent.fromAccountId) return null;
-            return await prisma.account.findUnique({
-                where: { id: parent.fromAccountId },
-            });
+            return await prisma.account.findUnique({ where: { id: parent.fromAccountId } });
         },
-
         toAccount: async (parent) => {
             if (!parent.toAccountId) return null;
-            return await prisma.account.findUnique({
-                where: { id: parent.toAccountId },
-            });
+            return await prisma.account.findUnique({ where: { id: parent.toAccountId } });
+        },
+    },
+
+    Investment: {
+        account: async (parent) => {
+            return await prisma.account.findUnique({ where: { id: parent.accountId } });
+        },
+    },
+
+    SupportTicket: {
+        user: async (parent) => {
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
+        },
+    },
+
+    AuditLog: {
+        user: async (parent) => {
+            if (!parent.userId) return null;
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
     },
 
     Card: {
         user: async (parent) => {
-            return await prisma.user.findUnique({
-                where: { id: parent.userId },
-            });
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
     },
 
     Beneficiary: {
         user: async (parent) => {
-            return await prisma.user.findUnique({
-                where: { id: parent.userId },
-            });
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
     },
 
     Notification: {
         user: async (parent) => {
-            return await prisma.user.findUnique({
-                where: { id: parent.userId },
-            });
+            return await prisma.user.findUnique({ where: { id: parent.userId } });
         },
     },
 };

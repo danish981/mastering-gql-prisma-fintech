@@ -7,7 +7,7 @@ datasource db {
 }
 
 // ============================================
-// AUTH & USER MANAGEMENT
+// ENUMS
 // ============================================
 
 enum UserRole {
@@ -23,6 +23,86 @@ enum AccountStatus {
   CLOSED
   PENDING_VERIFICATION
 }
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+  INVESTMENT
+  CRYPTO
+}
+
+enum Currency {
+  USD
+  EUR
+  GBP
+  JPY
+  BTC
+  ETH
+}
+
+enum TransactionType {
+  TRANSFER
+  DEPOSIT
+  WITHDRAWAL
+  PAYMENT
+  REFUND
+  FEE
+}
+
+enum TransactionStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REVERSED
+}
+
+enum CardType {
+  DEBIT
+  CREDIT
+  PREPAID
+  VIRTUAL
+}
+
+enum CardStatus {
+  ACTIVE
+  BLOCKED
+  EXPIRED
+  CANCELLED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum TicketPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  TRANSACTION
+  SECURITY
+  ACCOUNT
+  PROMOTIONAL
+  SYSTEM
+}
+
+enum NotificationStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+// ============================================
+// USER MODELS
+// ============================================
 
 model User {
   id            Int            @id @default(autoincrement())
@@ -48,6 +128,8 @@ model User {
   beneficiaries Beneficiary[]
   sessions      Session[]
   notifications Notification[]
+  auditLogs     AuditLog[]
+  tickets       SupportTicket[]
 
   @@index([email])
   @@index([phoneNumber])
@@ -86,66 +168,29 @@ model Session {
 }
 
 // ============================================
-// ACCOUNTS & BALANCES
+// FINANCIAL MODELS
 // ============================================
 
-enum AccountType {
-  CHECKING
-  SAVINGS
-  INVESTMENT
-  CRYPTO
-}
-
-enum Currency {
-  USD
-  EUR
-  GBP
-  JPY
-  BTC
-  ETH
-}
-
 model Account {
-  id              Int         @id @default(autoincrement())
-  userId          Int
-  accountNumber   String      @unique
-  accountType     AccountType @default(CHECKING)
-  currency        Currency    @default(USD)
-  balance         Decimal     @default(0) @db.Decimal(15, 2)
-  availableBalance Decimal    @default(0) @db.Decimal(15, 2)
-  isDefault       Boolean     @default(false)
-  status          AccountStatus @default(ACTIVE)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id               Int           @id @default(autoincrement())
+  userId           Int
+  accountNumber    String        @unique
+  accountType      AccountType   @default(CHECKING)
+  currency         Currency      @default(USD)
+  balance          Decimal       @default(0) @db.Decimal(15, 2)
+  availableBalance Decimal       @default(0) @db.Decimal(15, 2)
+  isDefault        Boolean       @default(false)
+  status           AccountStatus @default(ACTIVE)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
-  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactionsFrom    Transaction[] @relation("FromAccount")
-  transactionsTo      Transaction[] @relation("ToAccount")
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionsFrom Transaction[] @relation("FromAccount")
+  transactionsTo   Transaction[] @relation("ToAccount")
+  investments      Investment[]
 
   @@index([userId])
   @@index([accountNumber])
-}
-
-// ============================================
-// TRANSACTIONS
-// ============================================
-
-enum TransactionType {
-  TRANSFER
-  DEPOSIT
-  WITHDRAWAL
-  PAYMENT
-  REFUND
-  FEE
-}
-
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-  REVERSED
 }
 
 model Transaction {
@@ -175,34 +220,16 @@ model Transaction {
   @@index([createdAt])
 }
 
-// ============================================
-// CARDS
-// ============================================
-
-enum CardType {
-  DEBIT
-  CREDIT
-  PREPAID
-  VIRTUAL
-}
-
-enum CardStatus {
-  ACTIVE
-  BLOCKED
-  EXPIRED
-  CANCELLED
-}
-
 model Card {
   id              Int        @id @default(autoincrement())
   userId          Int
-  cardNumber      String     @unique // Last 4 digits only in production
+  cardNumber      String     @unique
   cardHolderName  String
   cardType        CardType
   status          CardStatus @default(ACTIVE)
   expiryMonth     Int
   expiryYear      Int
-  cvv             String     // Should be encrypted in production
+  cvv             String
   creditLimit     Decimal?   @db.Decimal(15, 2)
   availableCredit Decimal?   @db.Decimal(15, 2)
   isVirtual       Boolean    @default(false)
@@ -214,10 +241,6 @@ model Card {
   @@index([userId])
   @@index([cardNumber])
 }
-
-// ============================================
-// BENEFICIARIES
-// ============================================
 
 model Beneficiary {
   id            Int      @id @default(autoincrement())
@@ -237,22 +260,75 @@ model Beneficiary {
   @@index([userId])
 }
 
-// ============================================
-// NOTIFICATIONS
-// ============================================
+model Investment {
+  id            Int      @id @default(autoincrement())
+  accountId     Int
+  symbol        String
+  assetName     String
+  quantity      Decimal  @db.Decimal(18, 8)
+  averagePrice  Decimal  @db.Decimal(18, 4)
+  currentPrice  Decimal  @db.Decimal(18, 4)
+  totalValue    Decimal  @db.Decimal(18, 2)
+  plPercentage  Decimal  @db.Decimal(10, 2)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-enum NotificationType {
-  TRANSACTION
-  SECURITY
-  ACCOUNT
-  PROMOTIONAL
-  SYSTEM
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+  @@index([symbol])
 }
 
-enum NotificationStatus {
-  UNREAD
-  READ
-  ARCHIVED
+model MarketData {
+  id            Int      @id @default(autoincrement())
+  symbol        String   @unique
+  name          String
+  type          String   // CRYPTO, STOCK, FOREX
+  currentPrice  Decimal  @db.Decimal(18, 4)
+  change24h     Decimal  @db.Decimal(10, 2)
+  volume24h     Decimal  @db.Decimal(20, 2)
+  lastUpdated   DateTime @default(now())
+
+  @@index([symbol])
+}
+
+// ============================================
+// SYSTEM MODELS
+// ============================================
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  userId    Int?
+  action    String
+  resource  String
+  payload   Json?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SupportTicket {
+  id          Int            @id @default(autoincrement())
+  userId      Int
+  subject     String
+  description String
+  status      TicketStatus   @default(OPEN)
+  priority    TicketPriority @default(MEDIUM)
+  category    String?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  resolvedAt  DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
 }
 
 model Notification {
