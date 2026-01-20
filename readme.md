@@ -36,3 +36,6 @@ Is project ko chalane ke liye aapke paas niche di gayi cheezein honi chahiye:
 ```bash
 git clone <your-repo-url>
 cd mastering-gql-prisma-fin
+
+
+
