@@ -1,10 +1,11 @@
 const { PrismaClient } = require('@prisma/client');
 const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
+const { faker } = require('@faker-js/faker');
 require('dotenv').config();
 
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
+    connectionString: process.env.DATABASE_URL,
 });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
@@ -29,15 +30,14 @@ async function main() {
     // MARKET DATA (Static seeds)
     // ============================================
     console.log('📈 Seeding market data...');
-    await prisma.marketData.createMany({
-        data: [
-            { symbol: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currentPrice: 42000.50, change24h: 2.5, volume24h: 30000000000 },
-            { symbol: 'ETH', name: 'Ethereum', type: 'CRYPTO', currentPrice: 2250.75, change24h: -1.2, volume24h: 15000000000 },
-            { symbol: 'AAPL', name: 'Apple Inc.', type: 'STOCK', currentPrice: 185.92, change24h: 0.8, volume24h: 50000000 },
-            { symbol: 'TSLA', name: 'Tesla Inc.', type: 'STOCK', currentPrice: 215.45, change24h: -3.4, volume24h: 80000000 },
-            { symbol: 'EURUSD', name: 'Euro / US Dollar', type: 'FOREX', currentPrice: 1.09, change24h: 0.1, volume24h: 100000000 },
-        ]
-    });
+    const marketData = [
+        { symbol: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currentPrice: 42000.5, change24h: 2.5, volume24h: 30000000000 },
+        { symbol: 'ETH', name: 'Ethereum', type: 'CRYPTO', currentPrice: 2250.75, change24h: -1.2, volume24h: 15000000000 },
+        { symbol: 'AAPL', name: 'Apple Inc.', type: 'STOCK', currentPrice: 185.92, change24h: 0.8, volume24h: 50000000 },
+        { symbol: 'TSLA', name: 'Tesla Inc.', type: 'STOCK', currentPrice: 215.45, change24h: -3.4, volume24h: 80000000 },
+        { symbol: 'EURUSD', name: 'Euro / US Dollar', type: 'FOREX', currentPrice: 1.09, change24h: 0.1, volume24h: 100000000 },
+    ];
+    await prisma.marketData.createMany({ data: marketData });
 
     // ============================================
     // USERS & PROFILES (100 users)
@@ -45,34 +45,40 @@ async function main() {
     console.log('👥 Creating 100 users...');
     const baseUsers = [];
     for (let i = 1; i <= 100; i++) {
+        const firstName = faker.person.firstName();
+        const lastName = faker.person.lastName();
+        const email = faker.internet.email({ firstName, lastName });
+        const phoneNumber = faker.phone.number('+1##########');
+        const role = i === 1 ? 'ADMIN' : (i % 10 === 0 ? 'MERCHANT' : 'CUSTOMER');
+        const status = i % 5 === 0 ? 'SUSPENDED' : 'ACTIVE';
+
         baseUsers.push({
-            email: `user${i}@example.com`,
+            email,
             password: 'password123',
-            firstName: `FirstName${i}`,
-            lastName: `LastName${i}`,
-            phoneNumber: `+1${Math.floor(1000000000 + Math.random() * 9000000000)}`,
-            role: i === 1 ? 'ADMIN' : (i % 10 === 0 ? 'MERCHANT' : 'CUSTOMER'),
-            status: 'ACTIVE',
-            emailVerified: true,
-            kycVerified: i % 3 === 0,
+            firstName,
+            lastName,
+            phoneNumber,
+            role,
+            status,
+            emailVerified: i % 3 === 0,
+            kycVerified: i % 4 === 0,
         });
     }
-
-    // Use createMany to insert users first
     await prisma.user.createMany({ data: baseUsers });
 
-    // Fetch users to get their IDs for relations
     const allUsers = await prisma.user.findMany({ select: { id: true, email: true } });
 
-    // Create Profiles and Sessions in bulk
     console.log('👤 Creating profiles and sessions...');
-    const profiles = allUsers.map((u, i) => ({
+    const profiles = allUsers.map((u) => ({
         userId: u.id,
-        address: `${Math.floor(Math.random() * 999)} Fintech Lane`,
-        city: 'New York',
-        country: 'USA',
-        occupation: i % 5 === 0 ? 'Engineer' : 'Trader',
-        annualIncome: 50000 + Math.random() * 100000
+        address: faker.location.streetAddress(),
+        city: faker.location.city(),
+        state: faker.location.state(),
+        country: faker.location.country(),
+        postalCode: faker.location.zipCode(),
+        occupation: faker.person.jobTitle(),
+        annualIncome: faker.number.int({ min: 20000, max: 150000 }),
+        profileImageUrl: faker.image.avatar(),
     }));
     await prisma.userProfile.createMany({ data: profiles });
 
@@ -81,24 +87,30 @@ async function main() {
     // ============================================
     console.log('💰 Creating 200 accounts...');
     const accountsData = [];
-    allUsers.forEach(u => {
+    allUsers.forEach((u) => {
+        const currency = u.role === 'MERCHANT' ? 'EUR' : 'USD';
+        const balance = u.role === 'MERCHANT' ? faker.number.float({ min: 5000, max: 50000 }) : faker.number.float({ min: 1000, max: 10000 });
+
         // Checking Account
         accountsData.push({
             userId: u.id,
-            accountNumber: `ACC${u.id}CHK${Math.floor(Math.random() * 1000)}`,
+            accountNumber: `ACC${u.id}CHK${faker.number.int({ min: 1000, max: 9999 })}`,
             accountType: 'CHECKING',
-            balance: 1000 + Math.random() * 5000,
-            availableBalance: 1000 + Math.random() * 5000,
-            isDefault: true
+            currency,
+            balance,
+            availableBalance: balance * 0.9,
+            isDefault: true,
         });
+
         // Savings Account
         accountsData.push({
             userId: u.id,
-            accountNumber: `ACC${u.id}SAV${Math.floor(Math.random() * 1000)}`,
+            accountNumber: `ACC${u.id}SAV${faker.number.int({ min: 1000, max: 9999 })}`,
             accountType: 'SAVINGS',
-            balance: 5000 + Math.random() * 20000,
-            availableBalance: 5000 + Math.random() * 20000,
-            isDefault: false
+            currency,
+            balance: balance * 2,
+            availableBalance: balance * 2,
+            isDefault: false,
         });
     });
     await prisma.account.createMany({ data: accountsData });
@@ -112,19 +124,21 @@ async function main() {
     for (let i = 0; i < 500; i++) {
         const fromAcc = allAccounts[Math.floor(Math.random() * allAccounts.length)];
         const toAcc = allAccounts[Math.floor(Math.random() * allAccounts.length)];
-        const amount = Math.floor(Math.random() * 500) + 1;
+        const amount = faker.number.float({ min: 10, max: 1000 });
+        const statusOptions = ['COMPLETED', 'PENDING', 'FAILED'];
+        const status = statusOptions[Math.floor(Math.random() * statusOptions.length)];
 
         transactions.push({
             userId: fromAcc.userId,
             fromAccountId: fromAcc.id,
             toAccountId: toAcc.id !== fromAcc.id ? toAcc.id : null,
             type: 'TRANSFER',
-            status: 'COMPLETED',
-            amount: amount,
-            fee: 2.5,
-            reference: `TXN${Date.now()}${i}${Math.floor(Math.random() * 1000)}`,
-            description: `Bulk payment sample ${i}`,
-            processedAt: new Date()
+            status,
+            amount,
+            fee: faker.number.float({ min: 0, max: 5 }),
+            reference: faker.string.uuid(),
+            description: faker.lorem.sentence(),
+            processedAt: status === 'COMPLETED' ? new Date() : null,
         });
     }
     await prisma.transaction.createMany({ data: transactions });
@@ -138,18 +152,19 @@ async function main() {
     for (let i = 0; i < 100; i++) {
         const acc = allAccounts[Math.floor(Math.random() * allAccounts.length)];
         const symbol = symbols[Math.floor(Math.random() * symbols.length)];
-        const quantity = 0.1 + Math.random() * 10;
-        const avgPrice = 100 + Math.random() * 40000;
+        const quantity = faker.number.float({ min: 0.1, max: 10 });
+        const avgPrice = faker.number.float({ min: 100, max: 40000 });
+        const currentPrice = avgPrice * (1 + (Math.random() - 0.5) * 0.1);
 
         investments.push({
             accountId: acc.id,
-            symbol: symbol,
+            symbol,
             assetName: symbol === 'BTC' ? 'Bitcoin' : symbol,
-            quantity: quantity,
+            quantity,
             averagePrice: avgPrice,
-            currentPrice: avgPrice * (1 + (Math.random() - 0.5) * 0.1),
-            totalValue: quantity * avgPrice,
-            plPercentage: (Math.random() - 0.5) * 20
+            currentPrice,
+            totalValue: quantity * currentPrice,
+            plPercentage: ((currentPrice - avgPrice) / avgPrice) * 100,
         });
     }
     await prisma.investment.createMany({ data: investments });
@@ -162,12 +177,14 @@ async function main() {
     const actions = ['LOGIN', 'TRANSFER', 'UPDATE_PROFILE', 'CHANGE_PASSWORD'];
     for (let i = 0; i < 100; i++) {
         const u = allUsers[Math.floor(Math.random() * allUsers.length)];
+        const action = actions[Math.floor(Math.random() * actions.length)];
+
         auditLogs.push({
             userId: u.id,
-            action: actions[Math.floor(Math.random() * actions.length)],
-            resource: 'API',
-            ipAddress: '127.0.0.1',
-            userAgent: 'Mozilla/5.0'
+            action,
+            resource: action === 'LOGIN' ? 'AUTHENTICATION' : 'API',
+            ipAddress: faker.internet.ip(),
+            userAgent: faker.internet.userAgent(),
         });
     }
     await prisma.auditLog.createMany({ data: auditLogs });
@@ -179,12 +196,15 @@ async function main() {
     const tickets = [];
     for (let i = 0; i < 50; i++) {
         const u = allUsers[Math.floor(Math.random() * allUsers.length)];
+        const priorityOptions = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
+        const priority = priorityOptions[Math.floor(Math.random() * priorityOptions.length)];
+
         tickets.push({
             userId: u.id,
-            subject: `Help request ${i}`,
-            description: `This is a sample support ticket description for user ${u.id}`,
-            status: 'OPEN',
-            priority: 'MEDIUM'
+            subject: faker.lorem.words(5),
+            description: faker.lorem.paragraph(),
+            status: i % 3 === 0 ? 'RESOLVED' : 'OPEN',
+            priority,
         });
     }
     await prisma.supportTicket.createMany({ data: tickets });
@@ -196,12 +216,15 @@ async function main() {
     const notifications = [];
     for (let i = 0; i < 300; i++) {
         const u = allUsers[Math.floor(Math.random() * allUsers.length)];
+        const typeOptions = ['TRANSACTION', 'SECURITY', 'ACCOUNT', 'PROMOTIONAL'];
+        const type = typeOptions[Math.floor(Math.random() * typeOptions.length)];
+
         notifications.push({
             userId: u.id,
-            type: 'TRANSACTION',
-            title: 'Alert',
-            message: `Dynamic notification payload ${i}`,
-            status: 'UNREAD'
+            type,
+            title: faker.lorem.words(3),
+            message: faker.lorem.sentence(),
+            status: i % 2 === 0 ? 'READ' : 'UNREAD',
         });
     }
     await prisma.notification.createMany({ data: notifications });
