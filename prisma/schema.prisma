@@ -47,6 +47,7 @@ enum TransactionType {
   PAYMENT
   REFUND
   FEE
+  REWARD_REDEMPTION
 }
 
 enum TransactionStatus {
@@ -92,12 +93,28 @@ enum NotificationType {
   ACCOUNT
   PROMOTIONAL
   SYSTEM
+  REWARD
 }
 
 enum NotificationStatus {
   UNREAD
   READ
   ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
 }
 
 // ============================================
@@ -107,7 +124,7 @@ enum NotificationStatus {
 model User {
   id            Int            @id @default(autoincrement())
   email         String         @unique
-  password      String         // In production, this should be hashed
+  password      String         
   firstName     String
   lastName      String
   phoneNumber   String?        @unique
@@ -130,6 +147,13 @@ model User {
   notifications Notification[]
   auditLogs     AuditLog[]
   tickets       SupportTicket[]
+  rewardPoints  RewardPoint[]
+  redemptions   RewardRedemption[]
+  merchant      Merchant?
+  orders        Order[]
+  savingsGoals  SavingsGoal[]
+  connections   Connection[]    @relation("UserToConnection")
+  connectedTo   Connection[]    @relation("TargetToConnection")
 
   @@index([email])
   @@index([phoneNumber])
@@ -146,6 +170,8 @@ model UserProfile {
   occupation      String?
   annualIncome    Decimal? @db.Decimal(15, 2)
   profileImageUrl String?
+  bio             String?
+  preferences     Json?    // UI preferences, theme, etc.
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -188,6 +214,9 @@ model Account {
   transactionsFrom Transaction[] @relation("FromAccount")
   transactionsTo   Transaction[] @relation("ToAccount")
   investments      Investment[]
+  limits           AccountLimit[]
+  savingsGoal      SavingsGoal?  @relation(fields: [savingsGoalId], references: [id])
+  savingsGoalId    Int?
 
   @@index([userId])
   @@index([accountNumber])
@@ -205,7 +234,7 @@ model Transaction {
   fee             Decimal           @default(0) @db.Decimal(15, 2)
   description     String?
   reference       String            @unique
-  metadata        Json?             // For storing additional transaction data
+  metadata        Json?             
   processedAt     DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
@@ -213,6 +242,8 @@ model Transaction {
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   fromAccount Account? @relation("FromAccount", fields: [fromAccountId], references: [id])
   toAccount   Account? @relation("ToAccount", fields: [toAccountId], references: [id])
+  order       Order?   @relation(fields: [orderId], references: [id])
+  orderId     Int?     @unique
 
   @@index([userId])
   @@index([reference])
@@ -260,6 +291,166 @@ model Beneficiary {
   @@index([userId])
 }
 
+// ============================================
+// MERCHANT & COMMERCE
+// ============================================
+
+model Merchant {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @unique
+  businessName    String
+  category        String
+  taxId           String?
+  website         String?
+  isVerified      Boolean  @default(false)
+  logoUrl         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  products Product[]
+  orders   Order[]
+
+  @@index([userId])
+  @@index([businessName])
+}
+
+model Product {
+  id          Int      @id @default(autoincrement())
+  merchantId  Int
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(15, 2)
+  currency    Currency @default(USD)
+  stock       Int      @default(0)
+  imageUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  merchant Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([merchantId])
+}
+
+model Order {
+  id          Int         @id @default(autoincrement())
+  merchantId  Int
+  userId      Int
+  status      OrderStatus @default(PENDING)
+  totalAmount Decimal     @db.Decimal(15, 2)
+  currency    Currency    @default(USD)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  merchant    Merchant    @relation(fields: [merchantId], references: [id])
+  user        User        @relation(fields: [userId], references: [id])
+  items       OrderItem[]
+  transaction Transaction?
+
+  @@index([merchantId])
+  @@index([userId])
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  quantity  Int
+  price     Decimal @db.Decimal(15, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+}
+
+// ============================================
+// REWARDS & LOYALTY
+// ============================================
+
+model RewardPoint {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  points    Int
+  action    String   // EARNED, SPENT, EXPIRED
+  reason    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model RewardRedemption {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  pointsSpent Int
+  valueAmount Decimal  @db.Decimal(15, 2)
+  description String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================
+// LIMITS & GOALS
+// ============================================
+
+model AccountLimit {
+  id          Int      @id @default(autoincrement())
+  accountId   Int
+  limitType   String   // DAILY_SPEND, SINGLE_TXN, MONTHLY_WITHDRAWAL
+  limitAmount Decimal  @db.Decimal(15, 2)
+  resetPeriod String   // DAILY, WEEKLY, MONTHLY
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([accountId])
+}
+
+model SavingsGoal {
+  id            Int        @id @default(autoincrement())
+  userId        Int
+  name          String
+  targetAmount  Decimal    @db.Decimal(15, 2)
+  currentAmount Decimal    @default(0) @db.Decimal(15, 2)
+  status        GoalStatus @default(ACTIVE)
+  deadline      DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accounts Account[]
+
+  @@index([userId])
+}
+
+// ============================================
+// SOCIAL & CONNECTIONS
+// ============================================
+
+model Connection {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  targetUserId Int
+  status       String   // PENDING, ACCEPTED, BLOCKED
+  createdAt    DateTime @default(now())
+
+  user   User @relation("UserToConnection", fields: [userId], references: [id])
+  target User @relation("TargetToConnection", fields: [targetUserId], references: [id])
+
+  @@unique([userId, targetUserId])
+}
+
+// ============================================
+// INVESTMENT & MARKET DATA
+// ============================================
+
 model Investment {
   id            Int      @id @default(autoincrement())
   accountId     Int
@@ -283,7 +474,7 @@ model MarketData {
   id            Int      @id @default(autoincrement())
   symbol        String   @unique
   name          String
-  type          String   // CRYPTO, STOCK, FOREX
+  type          String   
   currentPrice  Decimal  @db.Decimal(18, 4)
   change24h     Decimal  @db.Decimal(10, 2)
   volume24h     Decimal  @db.Decimal(20, 2)

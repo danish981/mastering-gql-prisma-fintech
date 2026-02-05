@@ -252,6 +252,43 @@ const userResolver = {
         orderBy: { createdAt: 'desc' },
       });
     },
+    merchant: async (parent) => {
+      return await prisma.merchant.findUnique({
+        where: { userId: parent.id },
+      });
+    },
+    orders: async (parent) => {
+      return await prisma.order.findMany({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+    rewardPoints: async (parent) => {
+      return await prisma.rewardPoint.findMany({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+    redemptions: async (parent) => {
+      return await prisma.rewardRedemption.findMany({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+    savingsGoals: async (parent) => {
+      return await prisma.savingsGoal.findMany({
+        where: { userId: parent.id },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
+    connections: async (parent) => {
+      return await prisma.connection.findMany({
+        where: {
+          OR: [{ userId: parent.id }, { targetUserId: parent.id }],
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+    },
   },
 
   UserProfile: {

@@ -1,0 +1,112 @@
+extend type Query {
+  merchants(category: String): [Merchant!]!
+  merchant(id: Int!): Merchant
+  products(merchantId: Int!): [Product!]!
+  product(id: Int!): Product
+  orders(userId: Int, merchantId: Int): [Order!]!
+  order(id: Int!): Order
+}
+
+extend type Mutation {
+  registerMerchant(input: RegisterMerchantInput!): Merchant!
+  createProduct(input: CreateProductInput!): Product!
+  placeOrder(input: PlaceOrderInput!): Order!
+  updateOrderStatus(id: Int!, status: OrderStatus!): Order!
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+type Merchant {
+  id: Int!
+  userId: Int!
+  businessName: String!
+  category: String!
+  taxId: String
+  website: String
+  isVerified: Boolean!
+  logoUrl: String
+  createdAt: String!
+  updatedAt: String!
+  
+  user: User!
+  products: [Product!]!
+  orders: [Order!]!
+}
+
+type Product {
+  id: Int!
+  merchantId: Int!
+  name: String!
+  description: String
+  price: Float!
+  currency: Currency!
+  stock: Int!
+  imageUrl: String
+  isActive: Boolean!
+  createdAt: String!
+  updatedAt: String!
+  
+  merchant: Merchant!
+}
+
+type Order {
+  id: Int!
+  merchantId: Int!
+  userId: Int!
+  status: OrderStatus!
+  totalAmount: Float!
+  currency: Currency!
+  createdAt: String!
+  updatedAt: String!
+  
+  merchant: Merchant!
+  user: User!
+  items: [OrderItem!]!
+  transaction: Transaction
+}
+
+type OrderItem {
+  id: Int!
+  orderId: Int!
+  productId: Int!
+  quantity: Int!
+  price: Float!
+  
+  product: Product!
+}
+
+input RegisterMerchantInput {
+  userId: Int!
+  businessName: String!
+  category: String!
+  taxId: String
+  website: String
+}
+
+input CreateProductInput {
+  merchantId: Int!
+  name: String!
+  description: String
+  price: Float!
+  currency: Currency
+  stock: Int
+  imageUrl: String
+}
+
+input PlaceOrderInput {
+  userId: Int!
+  merchantId: Int!
+  items: [OrderItemInput!]!
+}
+
+input OrderItemInput {
+  productId: Int!
+  quantity: Int!
+}

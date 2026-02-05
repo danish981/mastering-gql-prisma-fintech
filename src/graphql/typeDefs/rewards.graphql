@@ -1,0 +1,27 @@
+extend type Query {
+  rewardBalance(userId: Int!): Int!
+  rewardHistory(userId: Int!): [RewardPoint!]!
+  redemptions(userId: Int!): [RewardRedemption!]!
+}
+
+extend type Mutation {
+  redeemPoints(userId: Int!, points: Int!, description: String): RewardRedemption!
+}
+
+type RewardPoint {
+  id: Int!
+  userId: Int!
+  points: Int!
+  action: String!
+  reason: String
+  createdAt: String!
+}
+
+type RewardRedemption {
+  id: Int!
+  userId: Int!
+  pointsSpent: Int!
+  valueAmount: Float!
+  description: String
+  createdAt: String!
+}

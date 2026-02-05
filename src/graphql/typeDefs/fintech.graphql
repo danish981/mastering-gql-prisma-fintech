@@ -32,6 +32,11 @@ extend type Query {
 
   # NEW: Audit queries
   auditLogs(userId: Int!, action: String): [AuditLog!]!
+
+  # NEW: Limits & Goals
+  accountLimits(accountId: Int!): [AccountLimit!]!
+  savingsGoals(userId: Int!): [SavingsGoal!]!
+  savingsGoal(id: Int!): SavingsGoal
 }
 
 extend type Mutation {
@@ -63,6 +68,12 @@ extend type Mutation {
   # NEW: Support mutations
   createTicket(input: CreateTicketInput!): SupportTicket!
   updateTicketStatus(id: Int!, status: TicketStatus!): SupportTicket!
+
+  # NEW: Limits & Goals Mutations
+  setAccountLimit(input: SetAccountLimitInput!): AccountLimit!
+  createSavingsGoal(input: CreateSavingsGoalInput!): SavingsGoal!
+  updateGoalAmount(id: Int!, amount: Float!): SavingsGoal!
+  linkGoalToAccount(goalId: Int!, accountId: Int!): Account!
 }
 
 # ============================================
@@ -102,6 +113,8 @@ type Account {
   transactionsFrom: [Transaction!]!
   transactionsTo: [Transaction!]!
   investments: [Investment!]!
+  limits: [AccountLimit!]!
+  savingsGoal: SavingsGoal
 }
 
 input CreateAccountInput {
@@ -361,4 +374,45 @@ type AuditLog {
   createdAt: String!
   
   user: User
+}
+
+# ============================================
+# LIMITS & GOALS
+# ============================================
+
+type AccountLimit {
+  id: Int!
+  accountId: Int!
+  limitType: String!
+  limitAmount: Float!
+  resetPeriod: String!
+  isActive: Boolean!
+  createdAt: String!
+  updatedAt: String!
+}
+
+type SavingsGoal {
+  id: Int!
+  userId: Int!
+  name: String!
+  targetAmount: Float!
+  currentAmount: Float!
+  status: String!
+  deadline: String
+  createdAt: String!
+  updatedAt: String!
+}
+
+input SetAccountLimitInput {
+  accountId: Int!
+  limitType: String!
+  limitAmount: Float!
+  resetPeriod: String!
+}
+
+input CreateSavingsGoalInput {
+  userId: Int!
+  name: String!
+  targetAmount: Float!
+  deadline: String
 }

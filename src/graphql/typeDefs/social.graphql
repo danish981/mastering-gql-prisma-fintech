@@ -1,0 +1,22 @@
+extend type Query {
+  connections(userId: Int!): [Connection!]!
+  pendingRequests(userId: Int!): [Connection!]!
+  suggestedConnections(userId: Int!): [User!]!
+}
+
+extend type Mutation {
+  sendConnectionRequest(userId: Int!, targetUserId: Int!): Connection!
+  acceptConnectionRequest(id: Int!): Connection!
+  removeConnection(id: Int!): Boolean!
+}
+
+type Connection {
+  id: Int!
+  userId: Int!
+  targetUserId: Int!
+  status: String!
+  createdAt: String!
+  
+  user: User!
+  targetUser: User!
+}

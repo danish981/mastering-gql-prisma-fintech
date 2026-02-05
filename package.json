@@ -2,17 +2,19 @@
   "name": "mastering-gql-prisma-fin",
   "version": "1.0.0",
   "main": "index.js",
+  "description": "Enterprise Fintech API with GraphQL and Prisma",
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "prisma:studio": "prisma studio",
-    "prisma:migrate": "prisma migrate dev",
-    "prisma:seed": "node src/seeders/common-seed.js"
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "node prisma/seed.js",
+    "db:studio": "prisma studio",
+    "db:reset": "prisma migrate reset --force && node prisma/seed.js",
+    "lint": "eslint src/**"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "@faker-js/faker": "^10.2.0",
     "@prisma/adapter-pg": "^7.2.0",

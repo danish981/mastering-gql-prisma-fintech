@@ -167,6 +167,27 @@ const fintechResolver = {
                 orderBy: { createdAt: 'desc' },
             });
         },
+
+        // NEW: Limits & Goals Queries
+        accountLimits: async (_, { accountId }) => {
+            return await prisma.accountLimit.findMany({
+                where: { accountId },
+                orderBy: { createdAt: 'desc' },
+            });
+        },
+
+        savingsGoals: async (_, { userId }) => {
+            return await prisma.savingsGoal.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+            });
+        },
+
+        savingsGoal: async (_, { id }) => {
+            return await prisma.savingsGoal.findUnique({
+                where: { id },
+            });
+        },
     },
 
     Mutation: {
@@ -217,10 +238,22 @@ const fintechResolver = {
             const { userId, fromAccountId, toAccountId, type, amount, currency = 'USD', description, metadata } = input;
 
             if (fromAccountId) {
-                const fromAccount = await prisma.account.findUnique({ where: { id: fromAccountId } });
+                const fromAccount = await prisma.account.findUnique({
+                    where: { id: fromAccountId },
+                    include: { limits: true }
+                });
                 if (!fromAccount) throw new GraphQLError('Source account not found');
+
+                // Check Limits
+                if (fromAccount.limits.length > 0) {
+                    const singleTxnLimit = fromAccount.limits.find(l => l.limitType === 'SINGLE_TXN' && l.isActive);
+                    if (singleTxnLimit && amount > parseFloat(singleTxnLimit.limitAmount)) {
+                        throw new GraphQLError(`Transaction exceeds single transaction limit of ${singleTxnLimit.limitAmount}`);
+                    }
+                }
+
                 if (['TRANSFER', 'WITHDRAWAL', 'PAYMENT'].includes(type)) {
-                    if (fromAccount.availableBalance < amount) throw new GraphQLError('Insufficient funds');
+                    if (parseFloat(fromAccount.availableBalance) < amount) throw new GraphQLError('Insufficient funds');
                 }
             }
 
@@ -253,41 +286,94 @@ const fintechResolver = {
             if (!transaction) throw new GraphQLError('Transaction not found');
             if (transaction.status !== 'PENDING') throw new GraphQLError('Transaction cannot be processed');
 
-            if (transaction.fromAccountId) {
-                await prisma.account.update({
-                    where: { id: transaction.fromAccountId },
+            return await prisma.$transaction(async (tx) => {
+                if (transaction.fromAccountId) {
+                    await tx.account.update({
+                        where: { id: transaction.fromAccountId },
+                        data: {
+                            balance: { decrement: transaction.amount + transaction.fee },
+                            availableBalance: { decrement: transaction.amount + transaction.fee },
+                        },
+                    });
+                }
+
+                if (transaction.toAccountId) {
+                    const toAccount = await tx.account.update({
+                        where: { id: transaction.toAccountId },
+                        data: {
+                            balance: { increment: transaction.amount },
+                            availableBalance: { increment: transaction.amount },
+                        },
+                    });
+
+                    // If linked to a savings goal, update it
+                    if (toAccount.savingsGoalId) {
+                        await tx.savingsGoal.update({
+                            where: { id: toAccount.savingsGoalId },
+                            data: { currentAmount: { increment: transaction.amount } }
+                        });
+                    }
+                }
+
+                const updatedTransaction = await tx.transaction.update({
+                    where: { id },
+                    data: { status: 'COMPLETED', processedAt: new Date() },
+                });
+
+                // Award Reward Points (1 point for every $10 spent)
+                if (['PAYMENT', 'TRANSFER'].includes(transaction.type)) {
+                    const points = Math.floor(transaction.amount / 10);
+                    if (points > 0) {
+                        await tx.rewardPoint.create({
+                            data: {
+                                userId: transaction.userId,
+                                points,
+                                action: 'EARNED',
+                                reason: `Transaction ${transaction.reference}`,
+                            },
+                        });
+                    }
+                }
+
+                await tx.notification.create({
                     data: {
-                        balance: { decrement: transaction.amount + transaction.fee },
-                        availableBalance: { decrement: transaction.amount + transaction.fee },
+                        userId: transaction.userId,
+                        type: 'TRANSACTION',
+                        title: 'Transaction Completed',
+                        message: `Your ${transaction.type.toLowerCase()} of $${transaction.amount} was successful`,
                     },
                 });
-            }
 
-            if (transaction.toAccountId) {
-                await prisma.account.update({
-                    where: { id: transaction.toAccountId },
-                    data: {
-                        balance: { increment: transaction.amount },
-                        availableBalance: { increment: transaction.amount },
-                    },
-                });
-            }
+                return updatedTransaction;
+            });
+        },
 
-            const updatedTransaction = await prisma.transaction.update({
+        // NEW: Limits & Goals Mutations
+        setAccountLimit: async (_, { input }) => {
+            return await prisma.accountLimit.create({
+                data: { ...input },
+            });
+        },
+
+        createSavingsGoal: async (_, { input }) => {
+            return await prisma.savingsGoal.create({
+                data: { ...input, status: 'ACTIVE' },
+            });
+        },
+
+        updateGoalAmount: async (_, { id, amount }) => {
+            return await prisma.savingsGoal.update({
                 where: { id },
-                data: { status: 'COMPLETED', processedAt: new Date() },
+                data: { currentAmount: amount },
             });
+        },
 
-            await prisma.notification.create({
-                data: {
-                    userId: transaction.userId,
-                    type: 'TRANSACTION',
-                    title: 'Transaction Completed',
-                    message: `Your ${transaction.type.toLowerCase()} of $${transaction.amount} was successful`,
-                },
+        linkGoalToAccount: async (_, { goalId, accountId }) => {
+            await prisma.account.update({
+                where: { id: accountId },
+                data: { savingsGoalId: goalId },
             });
-
-            return updatedTransaction;
+            return await prisma.account.findUnique({ where: { id: accountId } });
         },
 
         cancelTransaction: async (_, { id }) => {
@@ -420,6 +506,13 @@ const fintechResolver = {
         },
         investments: async (parent) => {
             return await prisma.investment.findMany({ where: { accountId: parent.id }, orderBy: { createdAt: 'desc' } });
+        },
+        limits: async (parent) => {
+            return await prisma.accountLimit.findMany({ where: { accountId: parent.id }, orderBy: { createdAt: 'desc' } });
+        },
+        savingsGoal: async (parent) => {
+            if (!parent.savingsGoalId) return null;
+            return await prisma.savingsGoal.findUnique({ where: { id: parent.savingsGoalId } });
         },
     },
 
