@@ -15,6 +15,8 @@ enum UserRole {
   ADMIN
   SUPPORT
   MERCHANT
+  PARTNER
+  AUDITOR
 }
 
 enum AccountStatus {
@@ -22,6 +24,7 @@ enum AccountStatus {
   SUSPENDED
   CLOSED
   PENDING_VERIFICATION
+  BLOCKED
 }
 
 enum AccountType {
@@ -29,6 +32,8 @@ enum AccountType {
   SAVINGS
   INVESTMENT
   CRYPTO
+  FIXED_DEPOSIT
+  LOAN
 }
 
 enum Currency {
@@ -48,6 +53,10 @@ enum TransactionType {
   REFUND
   FEE
   REWARD_REDEMPTION
+  LOAN_DISBURSEMENT
+  LOAN_REPAYMENT
+  INTEREST_CREDIT
+  TAX_DEDUCTION
 }
 
 enum TransactionStatus {
@@ -94,6 +103,8 @@ enum NotificationType {
   PROMOTIONAL
   SYSTEM
   REWARD
+  LOAN_UPDATE
+  KYC_UPDATE
 }
 
 enum NotificationStatus {
@@ -117,43 +128,80 @@ enum GoalStatus {
   CANCELLED
 }
 
+enum KycStatus {
+  PENDING
+  SUBMITTED
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum LoanStatus {
+  APPLIED
+  APPROVED
+  REJECTED
+  ACTIVE
+  PAID_OFF
+  DEFAULTED
+}
+
+enum InsuranceType {
+  HEALTH
+  LIFE
+  TRAVEL
+  AUTO
+  PROPERTY
+}
+
 // ============================================
-// USER MODELS
+// USER & ACCESS MODELS
 // ============================================
 
 model User {
-  id            Int            @id @default(autoincrement())
-  email         String         @unique
-  password      String         
-  firstName     String
-  lastName      String
-  phoneNumber   String?        @unique
-  dateOfBirth   DateTime?
-  role          UserRole       @default(CUSTOMER)
-  status        AccountStatus  @default(PENDING_VERIFICATION)
-  emailVerified Boolean        @default(false)
-  kycVerified   Boolean        @default(false)
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
-  lastLoginAt   DateTime?
+  id              Int            @id @default(autoincrement())
+  email           String         @unique
+  password        String         
+  firstName       String
+  lastName        String
+  phoneNumber     String?        @unique
+  dateOfBirth     DateTime?
+  role            UserRole       @default(CUSTOMER)
+  status          AccountStatus  @default(PENDING_VERIFICATION)
+  emailVerified   Boolean        @default(false)
+  kycVerified     Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  lastLoginAt     DateTime?
 
   // Relations
-  profile       UserProfile?
-  accounts      Account[]
-  cards         Card[]
-  transactions  Transaction[]
-  beneficiaries Beneficiary[]
-  sessions      Session[]
-  notifications Notification[]
-  auditLogs     AuditLog[]
-  tickets       SupportTicket[]
-  rewardPoints  RewardPoint[]
-  redemptions   RewardRedemption[]
-  merchant      Merchant?
-  orders        Order[]
-  savingsGoals  SavingsGoal[]
-  connections   Connection[]    @relation("UserToConnection")
-  connectedTo   Connection[]    @relation("TargetToConnection")
+  profile         UserProfile?
+  accounts        Account[]
+  cards           Card[]
+  transactions    Transaction[]
+  beneficiaries   Beneficiary[]
+  sessions        Session[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  tickets         SupportTicket[]
+  rewardPoints    RewardPoint[]
+  redemptions     RewardRedemption[]
+  merchant        Merchant?
+  orders          Order[]
+  savingsGoals    SavingsGoal[]
+  connections     Connection[]    @relation("UserToConnection")
+  connectedTo     Connection[]    @relation("TargetToConnection")
+  kycDoc          KycDocument?
+  verifications   KycVerification[]
+  loans           Loan[]
+  loanApps        LoanApplication[]
+  policies        InsurancePolicy[]
+  budgets         Budget[]
+  subscriptions   UserSubscription[]
+  apiKeys         ApiKey[]
+  referrals       Referral[]      @relation("Referrer")
+  referredBy      Referral?       @relation("ReferredUser")
+  taxReports      TaxReport[]
+  logins          LoginHistory[]
 
   @@index([email])
   @@index([phoneNumber])
@@ -171,7 +219,7 @@ model UserProfile {
   annualIncome    Decimal? @db.Decimal(15, 2)
   profileImageUrl String?
   bio             String?
-  preferences     Json?    // UI preferences, theme, etc.
+  preferences     Json?    
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -193,8 +241,35 @@ model Session {
   @@index([userId])
 }
 
+model LoginHistory {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  ipAddress    String?
+  userAgent    String?
+  location     String?
+  status       String   // SUCCESS, FAILED
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model ApiKey {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  key          String   @unique
+  name         String
+  scopes       String[] // read, write, etc.
+  isActive     Boolean  @default(true)
+  lastUsedAt   DateTime?
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
 // ============================================
-// FINANCIAL MODELS
+// FINANCIAL CORE MODELS
 // ============================================
 
 model Account {
@@ -217,6 +292,8 @@ model Account {
   limits           AccountLimit[]
   savingsGoal      SavingsGoal?  @relation(fields: [savingsGoalId], references: [id])
   savingsGoalId    Int?
+  loan             Loan?         @relation(fields: [loanId], references: [id])
+  loanId           Int?          @unique
 
   @@index([userId])
   @@index([accountNumber])
@@ -244,6 +321,8 @@ model Transaction {
   toAccount   Account? @relation("ToAccount", fields: [toAccountId], references: [id])
   order       Order?   @relation(fields: [orderId], references: [id])
   orderId     Int?     @unique
+  bill        Bill?    @relation(fields: [billId], references: [id])
+  billId      Int?
 
   @@index([userId])
   @@index([reference])
@@ -287,6 +366,170 @@ model Beneficiary {
   updatedAt     DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ============================================
+// KYC & COMPLIANCE
+// ============================================
+
+model KycDocument {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  documentType    String    // PASSPORT, DRIVING_LICENSE, ID_CARD
+  documentNumber  String
+  expiryDate      DateTime?
+  frontImageUrl   String
+  backImageUrl    String?
+  status          KycStatus @default(PENDING)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model KycVerification {
+  id              Int       @id @default(autoincrement())
+  userId          Int
+  verifiedBy      Int?      // Admin user ID
+  status          KycStatus
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// LOANS & LENDING
+// ============================================
+
+model LoanApplication {
+  id              Int        @id @default(autoincrement())
+  userId          Int
+  amountRequested Decimal    @db.Decimal(15, 2)
+  purpose         String
+  termMonths      Int
+  status          LoanStatus @default(APPLIED)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Loan {
+  id              Int        @id @default(autoincrement())
+  userId          Int
+  principalAmount Decimal    @db.Decimal(15, 2)
+  interestRate    Decimal    @db.Decimal(5, 2)
+  termMonths      Int
+  startDate       DateTime
+  endDate         DateTime
+  remainingAmount Decimal    @db.Decimal(15, 2)
+  status          LoanStatus @default(ACTIVE)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repayments Repayment[]
+  accounts   Account[]
+}
+
+model Repayment {
+  id              Int      @id @default(autoincrement())
+  loanId          Int
+  amount          Decimal  @db.Decimal(15, 2)
+  repaymentDate   DateTime
+  principalPaid   Decimal  @db.Decimal(15, 2)
+  interestPaid    Decimal  @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// INSURANCE
+// ============================================
+
+model InsurancePolicy {
+  id              Int           @id @default(autoincrement())
+  userId          Int
+  policyNumber    String        @unique
+  type            InsuranceType
+  premiumAmount   Decimal       @db.Decimal(15, 2)
+  coverageAmount  Decimal       @db.Decimal(15, 2)
+  startDate       DateTime
+  endDate         DateTime
+  status          String        // ACTIVE, EXPIRED, CANCELLED
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  claims InsuranceClaim[]
+}
+
+model InsuranceClaim {
+  id              Int      @id @default(autoincrement())
+  policyId        Int
+  amountClaimed   Decimal  @db.Decimal(15, 2)
+  reason          String
+  status          String   // PENDING, APPROVED, REJECTED
+  settledAmount   Decimal? @db.Decimal(15, 2)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  policy InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// BILLS & BUDGETING
+// ============================================
+
+model Biller {
+  id              Int      @id @default(autoincrement())
+  name            String
+  category        String   // UTILITY, TELECOM, EDUCATION
+  accountNumber   String?
+  logoUrl         String?
+  createdAt       DateTime @default(now())
+
+  bills Bill[]
+}
+
+model Bill {
+  id              Int      @id @default(autoincrement())
+  billerId        Int
+  amount          Decimal  @db.Decimal(15, 2)
+  dueDate         DateTime
+  status          String   // UNPAID, PAID, OVERDUE
+  referenceNum    String?
+  createdAt       DateTime @default(now())
+
+  biller       Biller        @relation(fields: [billerId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+}
+
+model Category {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  description     String?
+  icon            String?
+  
+  budgets Budget[]
+}
+
+model Budget {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  categoryId      Int
+  limitAmount     Decimal  @db.Decimal(15, 2)
+  spentAmount     Decimal  @default(0) @db.Decimal(15, 2)
+  period          String   // MONTHLY, WEEKLY
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
@@ -365,14 +608,14 @@ model OrderItem {
 }
 
 // ============================================
-// REWARDS & LOYALTY
+// REWARDS, LOYALTY & REFERRALS
 // ============================================
 
 model RewardPoint {
   id        Int      @id @default(autoincrement())
   userId    Int
   points    Int
-  action    String   // EARNED, SPENT, EXPIRED
+  action    String   
   reason    String?
   createdAt DateTime @default(now())
 
@@ -394,6 +637,96 @@ model RewardRedemption {
   @@index([userId])
 }
 
+model Referral {
+  id              Int      @id @default(autoincrement())
+  referrerId      Int
+  referredUserId  Int      @unique
+  referralCode    String
+  status          String   // PENDING, COMPLETED, REWARDED
+  rewardEarned    Int?     @default(0)
+  createdAt       DateTime @default(now())
+
+  referrer     User @relation("Referrer", fields: [referrerId], references: [id])
+  referredUser User @relation("ReferredUser", fields: [referredUserId], references: [id])
+}
+
+model Voucher {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  discountAmount  Decimal  @db.Decimal(15, 2)
+  isPercentage    Boolean  @default(false)
+  expiryDate      DateTime
+  usageLimit      Int      @default(1)
+  usageCount      Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+}
+
+// ============================================
+// SUBSCRIPTIONS
+// ============================================
+
+model SubscriptionPlan {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique
+  price           Decimal  @db.Decimal(15, 2)
+  currency        Currency @default(USD)
+  billingPeriod   String   // MONTHLY, YEARLY
+  features        Json?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  subscriptions UserSubscription[]
+}
+
+model UserSubscription {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  planId          Int
+  startDate       DateTime @default(now())
+  endDate         DateTime
+  status          String   // ACTIVE, CANCELLED, EXPIRED
+  autoRenew       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+}
+
+// ============================================
+// BRANCHES & INFRASTRUCTURE
+// ============================================
+
+model Branch {
+  id              Int      @id @default(autoincrement())
+  name            String
+  code            String   @unique
+  address         String
+  city            String
+  state           String?
+  country         String
+  phoneNumber     String?
+  coordinates     String?  // Latitude, Longitude
+  openingHours    String?
+  createdAt       DateTime @default(now())
+
+  atms ATM[]
+}
+
+model ATM {
+  id              Int      @id @default(autoincrement())
+  branchId        Int?
+  atmNumber       String   @unique
+  location        String
+  city            String
+  status          String   // ONLINE, OFFLINE, MAINTENANCE
+  hasCash         Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  branch Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
+}
+
 // ============================================
 // LIMITS & GOALS
 // ============================================
@@ -401,9 +734,9 @@ model RewardRedemption {
 model AccountLimit {
   id          Int      @id @default(autoincrement())
   accountId   Int
-  limitType   String   // DAILY_SPEND, SINGLE_TXN, MONTHLY_WITHDRAWAL
+  limitType   String   
   limitAmount Decimal  @db.Decimal(15, 2)
-  resetPeriod String   // DAILY, WEEKLY, MONTHLY
+  resetPeriod String   
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -438,7 +771,7 @@ model Connection {
   id           Int      @id @default(autoincrement())
   userId       Int
   targetUserId Int
-  status       String   // PENDING, ACCEPTED, BLOCKED
+  status       String   
   createdAt    DateTime @default(now())
 
   user   User @relation("UserToConnection", fields: [userId], references: [id])
@@ -484,7 +817,7 @@ model MarketData {
 }
 
 // ============================================
-// SYSTEM MODELS
+// SYSTEM & COMPLIANCE
 // ============================================
 
 model AuditLog {
@@ -538,4 +871,26 @@ model Notification {
   @@index([userId])
   @@index([status])
   @@index([createdAt])
+}
+
+model TaxReport {
+  id              Int      @id @default(autoincrement())
+  userId          Int
+  year            Int
+  totalIncome     Decimal  @db.Decimal(15, 2)
+  taxDeducted     Decimal  @db.Decimal(15, 2)
+  reportUrl       String?
+  status          String   // DRAFT, SUBMITTED, APPROVED
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model SystemWebhook {
+  id              Int      @id @default(autoincrement())
+  url             String
+  events          String[] // transaction.created, etc.
+  secret          String
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
 }

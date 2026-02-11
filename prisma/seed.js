@@ -3,237 +3,172 @@ const { PrismaPg } = require('@prisma/adapter-pg');
 const { Pool } = require('pg');
 require('dotenv').config();
 
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL
-});
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
 async function main() {
-    console.log('🌱 Starting MEGA bulk seed...');
+    console.log('🏁 Starting ENTERPRISE seed (43 Tables)...');
 
-    console.log('🗑️  Cleaning database...');
-    await prisma.connection.deleteMany();
-    await prisma.rewardRedemption.deleteMany();
-    await prisma.rewardPoint.deleteMany();
-    await prisma.orderItem.deleteMany();
-    await prisma.order.deleteMany();
-    await prisma.product.deleteMany();
-    await prisma.merchant.deleteMany();
-    await prisma.savingsGoal.deleteMany();
-    await prisma.accountLimit.deleteMany();
-    await prisma.notification.deleteMany();
-    await prisma.supportTicket.deleteMany();
-    await prisma.auditLog.deleteMany();
-    await prisma.investment.deleteMany();
-    await prisma.transaction.deleteMany();
-    await prisma.card.deleteMany();
-    await prisma.account.deleteMany();
-    await prisma.session.deleteMany();
-    await prisma.userProfile.deleteMany();
-    await prisma.user.deleteMany();
-    await prisma.marketData.deleteMany();
+    // CLEANUP ORDER (Child to Parent)
+    console.log('🧹 Clearing legacy data...');
+    const models = [
+        'SystemWebhook', 'TaxReport', 'LoginHistory', 'ApiKey', 'UserSubscription',
+        'SubscriptionPlan', 'Voucher', 'Referral', 'ATM', 'Branch', 'InsuranceClaim',
+        'InsurancePolicy', 'Repayment', 'Loan', 'LoanApplication', 'KycVerification',
+        'KycDocument', 'Budget', 'Category', 'Bill', 'Biller', 'OrderItem', 'Order',
+        'Product', 'Merchant', 'RewardRedemption', 'RewardPoint', 'Investment',
+        'MarketData', 'Transaction', 'Card', 'AccountLimit', 'SavingsGoal', 'Account',
+        'Connection', 'Notification', 'SupportTicket', 'AuditLog', 'Session',
+        'UserProfile', 'User'
+    ];
 
-    // ============================================
-    // MARKET DATA
-    // ============================================
-    console.log('📈 Seeding market data...');
-    await prisma.marketData.createMany({
+    for (const model of models) {
+        if (prisma[model.charAt(0).toLowerCase() + model.slice(1)]) {
+            await prisma[model.charAt(0).toLowerCase() + model.slice(1)].deleteMany();
+        }
+    }
+
+    // 1. STATIC DATA
+    console.log('📊 Seeding static plans and categories...');
+    await prisma.subscriptionPlan.createMany({
         data: [
-            { symbol: 'BTC', name: 'Bitcoin', type: 'CRYPTO', currentPrice: 43500.50, change24h: 3.2, volume24h: 35000000000 },
-            { symbol: 'ETH', name: 'Ethereum', type: 'CRYPTO', currentPrice: 2350.75, change24h: 1.5, volume24h: 18000000000 },
-            { symbol: 'AAPL', name: 'Apple Inc.', type: 'STOCK', currentPrice: 190.45, change24h: 0.5, volume24h: 45000000 },
-            { symbol: 'GOOGL', name: 'Alphabet Inc.', type: 'STOCK', currentPrice: 145.20, change24h: -0.2, volume24h: 25000000 },
-            { symbol: 'MSFT', name: 'Microsoft', type: 'STOCK', currentPrice: 410.15, change24h: 1.2, volume24h: 30000000 },
+            { name: 'Basic', price: 0, billingPeriod: 'MONTHLY' },
+            { name: 'Premium', price: 15, billingPeriod: 'MONTHLY' },
+            { name: 'Elite', price: 50, billingPeriod: 'YEARLY' }
         ]
     });
 
-    // ============================================
-    // USERS (200 users)
-    // ============================================
-    console.log('👥 Creating 200 users...');
-    const usersData = [];
-    for (let i = 1; i <= 200; i++) {
-        usersData.push({
-            email: `user${i}@fintech.com`,
-            password: 'password_secret',
-            firstName: `User${i}`,
-            lastName: `Last${i}`,
-            phoneNumber: `+1800555${i.toString().padStart(4, '0')}`,
-            role: i <= 10 ? 'ADMIN' : (i <= 60 ? 'MERCHANT' : 'CUSTOMER'),
-            status: 'ACTIVE',
-            emailVerified: true,
-            kycVerified: i % 2 === 0,
-        });
-    }
-    await prisma.user.createMany({ data: usersData });
+    await prisma.category.createMany({
+        data: [
+            { name: 'Food', icon: '🍲' },
+            { name: 'Transport', icon: '🚗' },
+            { name: 'Rent', icon: '🏠' },
+            { name: 'Entertainment', icon: '🎬' },
+            { name: 'Health', icon: '🏥' }
+        ]
+    });
+
+    await prisma.biller.createMany({
+        data: [
+            { name: 'Electric Grid', category: 'UTILITY' },
+            { name: 'Telco Mobile', category: 'TELECOM' },
+            { name: 'Water Works', category: 'UTILITY' }
+        ]
+    });
+
+    // 2. USERS
+    console.log('👥 Creating 50 enterprise users...');
+    const userData = Array.from({ length: 50 }).map((_, i) => ({
+        email: `corp_user${i}@atlas.com`,
+        password: 'secure_password',
+        firstName: `John${i}`,
+        lastName: `Doe${i}`,
+        status: 'ACTIVE',
+        role: i % 10 === 0 ? 'ADMIN' : 'CUSTOMER'
+    }));
+    await prisma.user.createMany({ data: userData });
     const allUsers = await prisma.user.findMany();
 
-    // ============================================
-    // PROFILES & SAVINGS GOALS
-    // ============================================
-    console.log('👤 Creating profiles and savings goals...');
-    const profiles = allUsers.map((u, i) => ({
-        userId: u.id,
-        address: `${100 + i} Financial Ave`,
-        city: i % 2 === 0 ? 'New York' : 'London',
-        country: i % 2 === 0 ? 'USA' : 'UK',
-        occupation: i % 3 === 0 ? 'Analyst' : 'Developer',
-        annualIncome: 60000 + (Math.random() * 80000)
-    }));
-    await prisma.userProfile.createMany({ data: profiles });
-
-    const goals = allUsers.slice(60).map(u => ({
-        userId: u.id,
-        name: 'New Car' + u.id,
-        targetAmount: 25000,
-        currentAmount: 5000 + Math.random() * 5000,
-        status: 'ACTIVE'
-    }));
-    await prisma.savingsGoal.createMany({ data: goals });
-    const allGoals = await prisma.savingsGoal.findMany();
-
-    // ============================================
-    // ACCOUNTS & LIMITS
-    // ============================================
-    console.log('💰 Creating 400 accounts...');
-    const accountsData = [];
-    allUsers.forEach(u => {
-        accountsData.push({
-            userId: u.id,
-            accountNumber: `BNK${u.id}001`,
-            accountType: 'CHECKING',
-            balance: 2000 + Math.random() * 10000,
-            availableBalance: 2000 + Math.random() * 10000,
-            isDefault: true
+    // 3. KYC & PROFILES
+    console.log('🆔 Processing KYC documents...');
+    for (const u of allUsers) {
+        await prisma.userProfile.create({
+            data: { userId: u.id, city: 'Metropolis', country: 'Atlantis' }
         });
-        accountsData.push({
-            userId: u.id,
-            accountNumber: `BNK${u.id}002`,
-            accountType: 'SAVINGS',
-            balance: 10000 + Math.random() * 50000,
-            availableBalance: 10000 + Math.random() * 50000,
-            isDefault: false,
-            savingsGoalId: u.role === 'CUSTOMER' ? allGoals.find(g => g.userId === u.id)?.id : null
+        await prisma.kycDocument.create({
+            data: {
+                userId: u.id,
+                documentType: 'PASSPORT',
+                documentNumber: `PASS${u.id}`,
+                frontImageUrl: 'https://example.com/front.jpg',
+                status: 'APPROVED'
+            }
         });
+    }
+
+    // 4. ACCOUNTS & CARDS
+    console.log('💳 Opening accounts and issuing cards...');
+    for (const u of allUsers) {
+        const acc = await prisma.account.create({
+            data: {
+                userId: u.id,
+                accountNumber: `ACC-CORP-${u.id}`,
+                balance: 50000,
+                availableBalance: 48000
+            }
+        });
+        await prisma.card.create({
+            data: {
+                userId: u.id,
+                cardNumber: `4111-2222-3333-${u.id.toString().padStart(4, '0')}`,
+                cardHolderName: `${u.firstName} ${u.lastName}`,
+                cardType: 'DEBIT',
+                expiryMonth: 12,
+                expiryYear: 2028,
+                cvv: '123'
+            }
+        });
+    }
+
+    // 5. LOANS & INSURANCE
+    console.log('🏦 Processing loans and policies...');
+    const targetUsers = allUsers.slice(0, 10);
+    for (const u of targetUsers) {
+        await prisma.loan.create({
+            data: {
+                userId: u.id,
+                principalAmount: 10000,
+                interestRate: 5.5,
+                termMonths: 24,
+                startDate: new Date(),
+                endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 2)),
+                remainingAmount: 10000,
+                status: 'ACTIVE'
+            }
+        });
+        await prisma.insurancePolicy.create({
+            data: {
+                userId: u.id,
+                policyNumber: `INS-${u.id}`,
+                type: 'HEALTH',
+                premiumAmount: 200,
+                coverageAmount: 500000,
+                startDate: new Date(),
+                endDate: new Date(new Date().setFullYear(new Date().getFullYear() + 1)),
+                status: 'ACTIVE'
+            }
+        });
+    }
+
+    // 6. INFRASTRUCTURE
+    console.log('📍 Mapping branches and ATMs...');
+    const branch = await prisma.branch.create({
+        data: { name: 'Main HQ', code: 'HQ001', address: '1 Enterprise Way', city: 'Metropolis', country: 'Atlantis' }
     });
-    await prisma.account.createMany({ data: accountsData });
-    const allAccounts = await prisma.account.findMany();
-
-    console.log('🔒 Setting account limits...');
-    const limits = allAccounts.filter(a => a.accountType === 'CHECKING').map(a => ({
-        accountId: a.id,
-        limitType: 'SINGLE_TXN',
-        limitAmount: 5000,
-        resetPeriod: 'DAILY'
-    }));
-    await prisma.accountLimit.createMany({ data: limits });
-
-    // ============================================
-    // MERCHANTS & PRODUCTS
-    // ============================================
-    console.log('🏬 Creating 50 merchants and 250 products...');
-    const merchantUsers = allUsers.filter(u => u.role === 'MERCHANT').slice(0, 50);
-    const merchantsData = merchantUsers.map((u, i) => ({
-        userId: u.id,
-        businessName: `BizCore ${i}`,
-        category: i % 2 === 0 ? 'Electronics' : 'Food',
-        isVerified: true
-    }));
-    await prisma.merchant.createMany({ data: merchantsData });
-    const allMerchants = await prisma.merchant.findMany();
-
-    const productsData = [];
-    allMerchants.forEach(m => {
-        for (let i = 1; i <= 5; i++) {
-            productsData.push({
-                merchantId: m.id,
-                name: `Product ${i} from ${m.businessName}`,
-                price: 10 + Math.random() * 500,
-                stock: 100
-            });
-        }
+    await prisma.aTM.createMany({
+        data: [
+            { atmNumber: 'ATM-001', location: 'Lobby 1', city: 'Metropolis', status: 'ONLINE', branchId: branch.id },
+            { atmNumber: 'ATM-002', location: 'Parking P5', city: 'Metropolis', status: 'ONLINE', branchId: branch.id }
+        ]
     });
-    await prisma.product.createMany({ data: productsData });
-    const allProducts = await prisma.product.findMany();
 
-    // ============================================
-    // ORDERS & REWARDS
-    // ============================================
-    console.log('🛒 Creating 400 orders...');
-    const customers = allUsers.filter(u => u.role === 'CUSTOMER');
-    const ordersData = [];
-    for (let i = 0; i < 400; i++) {
-        const customer = customers[Math.floor(Math.random() * customers.length)];
-        const merchant = allMerchants[Math.floor(Math.random() * allMerchants.length)];
-        ordersData.push({
-            userId: customer.id,
-            merchantId: merchant.id,
-            totalAmount: 50 + Math.random() * 200,
-            status: 'PAID'
+    // 7. SECURITY & ACCESS
+    console.log('🔐 Generating API keys and audit logs...');
+    for (const u of allUsers.slice(0, 5)) {
+        await prisma.apiKey.create({
+            data: { userId: u.id, name: 'Prod Access', key: `pk_live_${u.id}` }
+        });
+        await prisma.loginHistory.create({
+            data: { userId: u.id, ipAddress: '127.0.0.1', status: 'SUCCESS' }
         });
     }
-    await prisma.order.createMany({ data: ordersData });
-    const allOrders = await prisma.order.findMany();
 
-    console.log('🎁 Giving reward points...');
-    const points = customers.map(c => ({
-        userId: c.id,
-        points: Math.floor(Math.random() * 1000),
-        action: 'EARNED',
-        reason: 'Initial Signup'
-    }));
-    await prisma.rewardPoint.createMany({ data: points });
-
-    // ============================================
-    // TRANSACTIONS (1000 records)
-    // ============================================
-    console.log('💸 Creating 1000 transactions...');
-    const transactions = [];
-    for (let i = 0; i < 1000; i++) {
-        const acc = allAccounts[Math.floor(Math.random() * allAccounts.length)];
-        const targetAcc = allAccounts[Math.floor(Math.random() * allAccounts.length)];
-        transactions.push({
-            userId: acc.userId,
-            fromAccountId: acc.id,
-            toAccountId: targetAcc.id !== acc.id ? targetAcc.id : null,
-            type: 'TRANSFER',
-            amount: 10 + Math.random() * 1000,
-            status: 'COMPLETED',
-            reference: `TXN_MEGA_${i}_${Date.now()}`,
-            description: `Regular payment ${i}`
-        });
-    }
-    await prisma.transaction.createMany({ data: transactions });
-
-    // ============================================
-    // SOCIAL CONNECTIONS
-    // ============================================
-    console.log('🤝 Linking 100 connections...');
-    const connections = [];
-    for (let i = 0; i < 100; i++) {
-        const u1 = customers[Math.floor(Math.random() * (customers.length / 2))];
-        const u2 = customers[Math.floor(Math.random() * (customers.length / 2)) + (customers.length / 2)];
-        if (u1 && u2) {
-            connections.push({
-                userId: u1.id,
-                targetUserId: u2.id,
-                status: 'ACCEPTED'
-            });
-        }
-    }
-    // Remove duplicates for unique constraint
-    const uniqueConnections = Array.from(new Set(connections.map(c => JSON.stringify([c.userId, c.targetUserId]))))
-        .map(c => JSON.parse(c)).map(c => ({ userId: c[0], targetUserId: c[1], status: 'ACCEPTED' }));
-
-    await prisma.connection.createMany({ data: uniqueConnections });
-
-    console.log('\n✨ MEGA seed completed! Platform upgraded to Enterprise scale.');
+    console.log('✅ ENTERPRISE SEED COMPLETE! 🚀');
     await prisma.$disconnect();
-    process.exit(0);
 }
 
-main().catch((e) => {
-    console.error('❌ Error during MEGA seed:', e);
+main().catch(err => {
+    console.error('❌ Seed Failed:', err);
     process.exit(1);
 });

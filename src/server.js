@@ -8,6 +8,7 @@ const fintechResolver = require('./graphql/resolvers/fintechResolver');
 const merchantResolver = require('./graphql/resolvers/merchantResolver');
 const rewardResolver = require('./graphql/resolvers/rewardResolver');
 const socialResolver = require('./graphql/resolvers/socialResolver');
+const enterpriseResolver = require('./graphql/resolvers/enterpriseResolver');
 require('dotenv').config();
 
 const app = express();
@@ -21,7 +22,8 @@ const typeDefs = [
   loadTypeDef('fintech'),
   loadTypeDef('merchant'),
   loadTypeDef('rewards'),
-  loadTypeDef('social')
+  loadTypeDef('social'),
+  loadTypeDef('enterprise')
 ].join('\n');
 
 const resolvers = [
@@ -29,7 +31,8 @@ const resolvers = [
   fintechResolver,
   merchantResolver,
   rewardResolver,
-  socialResolver
+  socialResolver,
+  enterpriseResolver
 ];
 
 const server = new ApolloServer({

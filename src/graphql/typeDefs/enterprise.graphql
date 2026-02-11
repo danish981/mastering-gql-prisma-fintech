@@ -1,0 +1,270 @@
+extend type Query {
+  # KYC Queries
+  kycStatus(userId: Int!): KycDocument
+  verificationHistory(userId: Int!): [KycVerification!]!
+
+  # Loan Queries
+  loans(userId: Int!): [Loan!]!
+  loanApplications(userId: Int!): [LoanApplication!]!
+  loan(id: Int!): Loan
+
+  # Insurance Queries
+  policies(userId: Int!): [InsurancePolicy!]!
+  claims(policyId: Int!): [InsuranceClaim!]!
+
+  # Bill & Budget Queries
+  billers: [Biller!]!
+  bills(userId: Int!): [Bill!]!
+  budgets(userId: Int!): [Budget!]!
+  categories: [Category!]!
+
+  # Subscription Queries
+  plans: [SubscriptionPlan!]!
+  userSubscription(userId: Int!): UserSubscription
+
+  # infrastructure Queries
+  branches(city: String): [Branch!]!
+  atms(city: String): [ATM!]!
+
+  # Social & Referrals
+  referrals(userId: Int!): [Referral!]!
+  vouchers: [Voucher!]!
+
+  # Security & Compliance
+  loginHistory(userId: Int!): [LoginHistory!]!
+  apiKeys(userId: Int!): [ApiKey!]!
+  taxReports(userId: Int!): [TaxReport!]!
+}
+
+extend type Mutation {
+  # KYC Mutations
+  submitKyc(input: SubmitKycInput!): KycDocument!
+  verifyKyc(id: Int!, status: KycStatus!, notes: String): KycVerification!
+
+  # Loan Mutations
+  applyForLoan(input: ApplyLoanInput!): LoanApplication!
+  approveLoan(id: Int!): Loan!
+
+  # Insurance Mutations
+  purchasePolicy(input: PurchasePolicyInput!): InsurancePolicy!
+  fileInsuranceClaim(input: FileClaimInput!): InsuranceClaim!
+
+  # Bill & Budget Mutations
+  payBill(billId: Int!, accountId: Int!): Transaction!
+  setBudget(input: SetBudgetInput!): Budget!
+
+  # Subscription Mutations
+  subscribeToPlan(userId: Int!, planId: Int!): UserSubscription!
+
+  # Security Mutations
+  createApiKey(userId: Int!, name: String!): ApiKey!
+  revokeApiKey(id: Int!): Boolean!
+}
+
+# ============================================
+# TYPES
+# ============================================
+
+enum KycStatus { PENDING SUBMITTED UNDER_REVIEW APPROVED REJECTED }
+enum LoanStatus { APPLIED APPROVED REJECTED ACTIVE PAID_OFF DEFAULTED }
+enum InsuranceType { HEALTH LIFE TRAVEL AUTO PROPERTY }
+
+type KycDocument {
+  id: Int!
+  userId: Int!
+  documentType: String!
+  documentNumber: String!
+  status: KycStatus!
+  createdAt: String!
+}
+
+type KycVerification {
+  id: Int!
+  userId: Int!
+  status: KycStatus!
+  notes: String
+  createdAt: String!
+}
+
+type Loan {
+  id: Int!
+  userId: Int!
+  principalAmount: Float!
+  interestRate: Float!
+  termMonths: Int!
+  remainingAmount: Float!
+  status: LoanStatus!
+  repayments: [Repayment!]!
+}
+
+type LoanApplication {
+  id: Int!
+  userId: Int!
+  amountRequested: Float!
+  purpose: String!
+  status: LoanStatus!
+  createdAt: String!
+}
+
+type Repayment {
+  id: Int!
+  amount: Float!
+  repaymentDate: String!
+  principalPaid: Float!
+  interestPaid: Float!
+}
+
+type InsurancePolicy {
+  id: Int!
+  policyNumber: String!
+  type: InsuranceType!
+  premiumAmount: Float!
+  coverageAmount: Float!
+  status: String!
+  claims: [InsuranceClaim!]!
+}
+
+type InsuranceClaim {
+  id: Int!
+  amountClaimed: Float!
+  reason: String!
+  status: String!
+  settledAmount: Float
+}
+
+type Biller {
+  id: Int!
+  name: String!
+  category: String!
+}
+
+type Bill {
+  id: Int!
+  billerId: Int!
+  amount: Float!
+  dueDate: String!
+  status: String!
+  biller: Biller!
+}
+
+type Budget {
+  id: Int!
+  categoryId: Int!
+  limitAmount: Float!
+  spentAmount: Float!
+  period: String!
+  category: Category!
+}
+
+type Category {
+  id: Int!
+  name: String!
+  icon: String
+}
+
+type SubscriptionPlan {
+  id: Int!
+  name: String!
+  price: Float!
+  billingPeriod: String!
+  features: JSON
+}
+
+type UserSubscription {
+  id: Int!
+  planId: Int!
+  status: String!
+  endDate: String!
+  plan: SubscriptionPlan!
+}
+
+type Branch {
+  id: Int!
+  name: String!
+  code: String!
+  city: String!
+  atms: [ATM!]!
+}
+
+type ATM {
+  id: Int!
+  atmNumber: String!
+  location: String!
+  status: String!
+}
+
+type Referral {
+  id: Int!
+  referrerId: Int!
+  referredUserId: Int!
+  status: String!
+  rewardEarned: Int
+}
+
+type Voucher {
+  id: Int!
+  code: String!
+  discountAmount: Float!
+  expiryDate: String!
+}
+
+type LoginHistory {
+  id: Int!
+  ipAddress: String
+  userAgent: String
+  status: String!
+  createdAt: String!
+}
+
+type ApiKey {
+  id: Int!
+  key: String!
+  name: String!
+  isActive: Boolean!
+}
+
+type TaxReport {
+  id: Int!
+  year: Int!
+  totalIncome: Float!
+  taxDeducted: Float!
+  status: String!
+}
+
+# ============================================
+# INPUTS
+# ============================================
+
+input SubmitKycInput {
+  userId: Int!
+  documentType: String!
+  documentNumber: String!
+  frontImageUrl: String!
+}
+
+input ApplyLoanInput {
+  userId: Int!
+  amountRequested: Float!
+  purpose: String!
+  termMonths: Int!
+}
+
+input PurchasePolicyInput {
+  userId: Int!
+  type: InsuranceType!
+  premiumAmount: Float!
+  coverageAmount: Float!
+}
+
+input FileClaimInput {
+  policyId: Int!
+  amountClaimed: Float!
+  reason: String!
+}
+
+input SetBudgetInput {
+  userId: Int!
+  categoryId: Int!
+  limitAmount: Float!
+  period: String!
+}
