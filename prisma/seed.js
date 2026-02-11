@@ -349,12 +349,39 @@ async function main() {
     const mainHQ = await prisma.branch.create({
         data: { name: 'Main HQ', code: 'BH-001', address: '1 Finance St', city: 'Metropolis', country: 'Atlantis' }
     });
-    await prisma.aTM.createMany({
+    const atms = await prisma.aTM.createMany({
         data: [
             { branchId: mainHQ.id, atmNumber: 'ATM-00X', location: 'Lobby', city: 'Metropolis', status: 'ONLINE' },
             { branchId: mainHQ.id, atmNumber: 'ATM-00Y', location: 'Drive-thru', city: 'Metropolis', status: 'ONLINE' }
         ]
     });
+
+    // FINAL REPORTING
+    const counts = {
+        Users: await prisma.user.count(),
+        Accounts: await prisma.account.count(),
+        Transactions: await prisma.transaction.count(),
+        Cards: await prisma.card.count(),
+        Loans: await prisma.loan.count(),
+        Merchant: await prisma.merchant.count(),
+        Products: await prisma.product.count(),
+        Orders: await prisma.order.count(),
+        InsurancePolicies: await prisma.insurancePolicy.count(),
+        SupportTickets: await prisma.supportTicket.count(),
+        MarketData: await prisma.marketData.count(),
+        TaxReports: await prisma.taxReport.count(),
+        ApiKeys: await prisma.apiKey.count(),
+        Budgets: await prisma.budget.count(),
+        Bills: await prisma.bill.count()
+    };
+
+    console.log('\n==========================================');
+    console.log('🚀 ENTERPRISE PLATFORM RECOVERY SUCCESSFUL');
+    console.log('==========================================');
+    Object.entries(counts).forEach(([table, count]) => {
+        console.log(`✅ ${table.padEnd(20)} : ${count} records`);
+    });
+    console.log('==========================================\n');
 
     console.log('✨ ALL 43+ TABLES SEEDED WITH REALISTIC RECORDS! 🚀');
     await prisma.$disconnect();
