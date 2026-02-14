@@ -5,9 +5,10 @@ extend type Query {
   accountByNumber(accountNumber: String!): Account
   
   # Transaction queries
-  transactions(userId: Int!, status: TransactionStatus, type: TransactionType, limit: Int): [Transaction!]!
+  transactions(userId: Int!, status: TransactionStatus, type: TransactionType, limit: Int, offset: Int): [Transaction!]!
   transaction(id: Int!): Transaction
   transactionByReference(reference: String!): Transaction
+  totalTransactions(userId: Int!): Int!
   
   # Card queries
   cards(userId: Int!): [Card!]!
@@ -18,8 +19,9 @@ extend type Query {
   beneficiary(id: Int!): Beneficiary
   
   # Notification queries
-  notifications(userId: Int!, status: NotificationStatus): [Notification!]!
+  notifications(userId: Int!, status: NotificationStatus, limit: Int, offset: Int): [Notification!]!
   unreadNotificationCount(userId: Int!): Int!
+  totalNotifications(userId: Int!): Int!
 
   # NEW: Investment queries
   investments(accountId: Int!): [Investment!]!
@@ -31,7 +33,11 @@ extend type Query {
   ticket(id: Int!): SupportTicket
 
   # NEW: Audit queries
-  auditLogs(userId: Int!, action: String): [AuditLog!]!
+  auditLogs(userId: Int!, action: String, limit: Int, offset: Int): [AuditLog!]!
+  totalAuditLogs(userId: Int!): Int!
+
+  # NEW: Dashboard
+  userDashboard(userId: Int!): UserDashboard!
 
   # NEW: Limits & Goals
   accountLimits(accountId: Int!): [AccountLimit!]!
@@ -401,6 +407,16 @@ type SavingsGoal {
   deadline: String
   createdAt: String!
   updatedAt: String!
+}
+
+type UserDashboard {
+  totalBalance: Float!
+  activeAccountsCount: Int!
+  recentTransactionsCount: Int!
+  unreadNotificationsCount: Int!
+  activeCardsCount: Int!
+  openTicketsCount: Int!
+  savingsProgressPercentage: Float!
 }
 
 input SetAccountLimitInput {

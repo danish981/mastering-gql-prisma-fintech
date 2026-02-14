@@ -44,7 +44,7 @@ const fintechResolver = {
         // ============================================
         // TRANSACTION QUERIES
         // ============================================
-        transactions: async (_, { userId, status, type, limit = 50 }) => {
+        transactions: async (_, { userId, status, type, limit = 50, offset = 0 }) => {
             const where = { userId };
             if (status) where.status = status;
             if (type) where.type = type;
@@ -53,6 +53,13 @@ const fintechResolver = {
                 where,
                 orderBy: { createdAt: 'desc' },
                 take: limit,
+                skip: offset,
+            });
+        },
+
+        totalTransactions: async (_, { userId }) => {
+            return await prisma.transaction.count({
+                where: { userId },
             });
         },
 
@@ -103,13 +110,21 @@ const fintechResolver = {
         // ============================================
         // NOTIFICATION QUERIES
         // ============================================
-        notifications: async (_, { userId, status }) => {
+        notifications: async (_, { userId, status, limit = 50, offset = 0 }) => {
             const where = { userId };
             if (status) where.status = status;
 
             return await prisma.notification.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
+                take: limit,
+                skip: offset,
+            });
+        },
+
+        totalNotifications: async (_, { userId }) => {
+            return await prisma.notification.count({
+                where: { userId },
             });
         },
 
@@ -159,12 +174,20 @@ const fintechResolver = {
         },
 
         // NEW: Audit Queries
-        auditLogs: async (_, { userId, action }) => {
+        auditLogs: async (_, { userId, action, limit = 50, offset = 0 }) => {
             const where = { userId };
             if (action) where.action = action;
             return await prisma.auditLog.findMany({
                 where,
                 orderBy: { createdAt: 'desc' },
+                take: limit,
+                skip: offset,
+            });
+        },
+
+        totalAuditLogs: async (_, { userId }) => {
+            return await prisma.auditLog.count({
+                where: { userId },
             });
         },
 
@@ -187,6 +210,43 @@ const fintechResolver = {
             return await prisma.savingsGoal.findUnique({
                 where: { id },
             });
+        },
+
+        userDashboard: async (_, { userId }) => {
+            const [
+                accounts,
+                recentTxns,
+                unreadNotifs,
+                activeCards,
+                openTickets,
+                savingsGoals
+            ] = await Promise.all([
+                prisma.account.findMany({ where: { userId, status: 'ACTIVE' } }),
+                prisma.transaction.count({ where: { userId, createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
+                prisma.notification.count({ where: { userId, status: 'UNREAD' } }),
+                prisma.card.count({ where: { userId, status: 'ACTIVE' } }),
+                prisma.supportTicket.count({ where: { userId, status: 'OPEN' } }),
+                prisma.savingsGoal.findMany({ where: { userId, status: 'ACTIVE' } })
+            ]);
+
+            const totalBalance = accounts.reduce((acc, a) => acc + parseFloat(a.balance), 0);
+
+            let savingsProgress = 0;
+            if (savingsGoals.length > 0) {
+                const totalTarget = savingsGoals.reduce((acc, g) => acc + parseFloat(g.targetAmount), 0);
+                const totalCurrent = savingsGoals.reduce((acc, g) => acc + parseFloat(g.currentAmount), 0);
+                savingsProgress = totalTarget > 0 ? (totalCurrent / totalTarget) * 100 : 0;
+            }
+
+            return {
+                totalBalance: parseFloat(totalBalance.toFixed(2)),
+                activeAccountsCount: accounts.length,
+                recentTransactionsCount: recentTxns,
+                unreadNotificationsCount: unreadNotifs,
+                activeCardsCount: activeCards,
+                openTicketsCount: openTickets,
+                savingsProgressPercentage: parseFloat(savingsProgress.toFixed(2))
+            };
         },
     },
 
